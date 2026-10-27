@@ -1,0 +1,122 @@
+﻿@* 2026-10-24 17:35 modified: RWD layout with top bar + left menu (Bootstrap, no AdminLTE) *@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - jsERP</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/css/app.css" asp-append-version="true" />
+</head>
+
+<body>
+
+    <!-- Vue app: top bar + left menu -->
+    <div id="layout-app" v-cloak data-menu-url="@Url.Content("~/api/menu")"
+         data-logout-url="@Url.Content("~/api/auth/logout")" data-login-url="@Url.Content("~/Login")">
+        @Html.AntiForgeryToken()
+
+        <!-- Top bar -->
+        <nav class="navbar navbar-dark bg-primary fixed-top app-topbar">
+            <div class="container-fluid">
+                <div class="d-flex align-items-center">
+                    <button type="button" class="btn btn-link text-white fs-4 p-0 me-3" v-on:click="toggleSidebar">
+                        <i class="bi bi-list"></i>
+                    </button>
+                    <a class="navbar-brand" href="@Url.Action("Index", "Home")">jsERP</a>
+                </div>
+
+                <!-- User dropdown -->
+                <div class="dropdown">
+                    <button type="button" class="btn btn-link text-white text-decoration-none dropdown-toggle"
+                            data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle"></i>
+                        <span class="d-none d-sm-inline">{{ userId }} {{ userName }}</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><span class="dropdown-item-text small text-muted">{{ userId }} - {{ userName }}</span></li>
+                        <li>
+                            <hr class="dropdown-divider" />
+                        </li>
+                        <li>
+                            <button type="button" class="dropdown-item" v-on:click="logout" v-bind:disabled="busy">
+                                <i class="bi bi-box-arrow-right me-2"></i>登出
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Left menu -->
+        <aside class="app-sidebar bg-dark text-white">
+            <div class="px-3 py-2 small text-white-50 border-bottom border-secondary">
+                <i class="bi bi-person"></i> {{ userId }} - {{ userName }}
+            </div>
+
+            <div v-if="loading" class="p-3 small">選單載入中…</div>
+
+            <div v-if="error" class="p-3 small text-warning">
+                {{ error }}
+                <button type="button" class="btn btn-sm btn-light mt-2" v-on:click="loadMenu">重試</button>
+            </div>
+
+            <!-- No menu: user role is not in any role group (2026-10-24 17:40 added) -->
+            <div v-if="!loading && !error && menu.length === 0" class="p-3 small text-white-50">
+                此帳號尚無選單權限，請將角色加入權限群組（SYS_ROLEGROUPS_D）。
+            </div>
+
+            <ul class="nav flex-column app-menu">
+                <li v-for="parent in menu" v-bind:key="parent.id" class="nav-item">
+
+                    <!-- Top menu with children: click to open / close -->
+                    <a v-if="parent.children.length > 0" href="#" class="nav-link"
+                       v-on:click.prevent="toggleMenu(parent.id)">
+                        <!-- Show sort no from API (2026-10-24 18:10 modified) -->
+                        <i class="bi bi-folder me-2"></i>{{ parent.name }} {{ parent.sortNo }}
+                        <i class="bi float-end"
+                           v-bind:class="isOpen(parent.id) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                    </a>
+
+                    <!-- Top menu without children: normal link -->
+                    <a v-else v-bind:href="parent.url" class="nav-link"
+                       v-bind:class="{ active: isActive(parent.url), 'menu-todo': parent.url === '#' }">
+                        <!-- Show sort no from API (2026-10-24 18:10 modified) -->
+                        <i class="bi bi-file-earmark me-2"></i>{{ parent.name }} {{ parent.sortNo }}
+                    </a>
+
+                    <!-- Children -->
+                    <ul v-if="isOpen(parent.id)" class="nav flex-column app-submenu">
+                        <li v-for="child in parent.children" v-bind:key="child.id" class="nav-item">
+                            <a v-bind:href="child.url" class="nav-link"
+                               v-bind:class="{ active: isActive(child.url), 'menu-todo': child.url === '#' }"
+                               v-bind:title="child.code">
+                                <!-- Show sort no from API (2026-10-24 18:10 modified) -->
+                                <i class="bi bi-dot"></i>{{ child.name }} {{ child.sortNo }}
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+        </aside>
+
+        <!-- Dark background behind the menu (phone only, see app.css) -->
+        <div class="sidebar-backdrop" v-on:click="toggleSidebar"></div>
+    </div>
+
+    <!-- Page content -->
+    <main class="app-main">
+        <div class="container-fluid py-3">
+            @RenderBody()
+        </div>
+    </main>
+
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/lib/vue/vue.global.prod.js"></script>
+    <script src="~/js/layout.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+
+</html>
