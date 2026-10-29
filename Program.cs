@@ -1,7 +1,11 @@
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllersWithViews();
+// 2026-10-29 16:15 modified: page title = menu caption for every page (Filters/PageTitleFilter.cs)
+builder.Services.AddControllersWithViews(options =>
+{
+    options.Filters.Add<jsERP.Filters.PageTitleFilter>();
+});
 
 // 2026-10-24 17:35 added: database repository (login + menu)
 builder.Services.AddScoped<jsERP.Services.ErpRepository>();

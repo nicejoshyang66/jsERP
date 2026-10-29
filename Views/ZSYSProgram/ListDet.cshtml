@@ -1,6 +1,7 @@
 @* 2026-10-28 14:00 added: 系統程式資料維護 - detail page of one master (layout like the old project xxxBackup) *@
 @{
-    ViewData["Title"] = "系統程式資料維護";
+    // 2026-10-29 16:15 modified: title comes from the menu (PageTitleFilter); this text is only the default
+    ViewData["Title"] = ViewData["Title"] ?? "系統程式資料維護";
 }
 
 <!-- Vue app: one master + its detail programs -->
@@ -12,6 +13,8 @@
      data-update-url="@Url.Action("Update", "ZSYSProgram")"
      data-delete-url="@Url.Action("Delete", "ZSYSProgram")">
     @Html.AntiForgeryToken()
+
+    <h1 class="page-title">@ViewData["Title"]</h1> <!-- 2026-10-29 16:20 added: menu caption, same as other pages; 2026-10-29 16:26 modified: class page-title -->
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 

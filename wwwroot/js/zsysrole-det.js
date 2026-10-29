@@ -1,4 +1,5 @@
 // 2026-10-29 10:51 added: 角色資料維護 - detail page of one user, tabs Roles / RoleGroups (Vue Composition API)
+// 2026-10-29 15:44 modified: 群組 button removed, the group of a role is a select in the role form
 (function () {
     const { createApp, ref, onMounted } = Vue;
 
@@ -15,15 +16,13 @@
 
             // Roles tab
             const roleList = ref([]);
-            const roleGroups = ref([]);      // groups of one role (群組 button)
-            const currentRoleId = ref('');   // role of the 群組 modal
+            // 2026-10-29 15:44 removed: roleGroups, currentRoleId (群組 button)
 
-            // RoleGroups tab
+            // RoleGroups tab (also the options of the 所屬群組 select)
             const groupList = ref([]);
 
             // Modals (the <div class="modal">) and their forms
             const roleModal = ref(null);
-            const roleGroupsModal = ref(null);
             const groupModal = ref(null);
             const roleForm = ref({});
             const groupForm = ref({});
@@ -94,11 +93,13 @@
             }
 
             // Load the user on top, then the first tab
+            // 2026-10-29 15:44 modified: also load the groups (options of the 所屬群組 select)
             async function loadUser() {
                 error.value = '';
                 try {
                     user.value = await getJson(urls.userOneUrl + '?userId=' + encodeURIComponent(userId));
                     await loadRoles();
+                    await loadGroups();
                 } catch (requestError) {
                     error.value = requestError.message;
                 }
@@ -115,18 +116,25 @@
                 }
             }
 
+            // 2026-10-29 15:44 modified: add groupId ('' = no group)
             function openRoleCreate() {
                 isNew.value = true;
                 formError.value = '';
-                roleForm.value = { roleId: '', roleDesc: '', userId: user.value.userId };
+                roleForm.value = { roleId: '', roleDesc: '', userId: user.value.userId, groupId: '' };
                 showModal(roleModal);
             }
 
+            // 2026-10-29 15:44 modified: add groupId ('' = no group)
             function openRoleEdit(item) {
                 isNew.value = false;
                 formError.value = '';
                 // Copy the row, so the table does not change before saving
-                roleForm.value = { roleId: item.roleId, roleDesc: item.roleDesc, userId: user.value.userId };
+                roleForm.value = {
+                    roleId: item.roleId,
+                    roleDesc: item.roleDesc,
+                    userId: user.value.userId,
+                    groupId: item.groupId || ''
+                };
                 showModal(roleModal);
             }
 
@@ -161,42 +169,7 @@
                 }
             }
 
-            // 群組 button: check the groups of one role
-            async function openRoleGroups(item) {
-                formError.value = '';
-                error.value = '';
-                try {
-                    currentRoleId.value = item.roleId;
-                    roleGroups.value = await getJson(urls.roleGroupsUrl + '?roleId=' + encodeURIComponent(item.roleId));
-                    showModal(roleGroupsModal);
-                } catch (requestError) {
-                    error.value = requestError.message;
-                }
-            }
-
-            async function saveRoleGroups() {
-                if (busy.value) {
-                    return;
-                }
-                busy.value = true;
-                formError.value = '';
-                try {
-                    // only the checked group ids
-                    const groupIds = [];
-                    for (const item of roleGroups.value) {
-                        if (item.isChecked === 1) {
-                            groupIds.push(item.groupId);
-                        }
-                    }
-                    await postJson(urls.roleGroupsSaveUrl, { roleId: currentRoleId.value, groupIds: groupIds });
-                    hideModal(roleGroupsModal);
-                    await loadRoles();
-                } catch (requestError) {
-                    formError.value = requestError.message;
-                } finally {
-                    busy.value = false;
-                }
-            }
+            // 2026-10-29 15:44 removed: openRoleGroups, saveRoleGroups (群組 button)
 
             // ==================== RoleGroups tab ====================
 
@@ -260,13 +233,14 @@
                 user, activeTab, error, changeTab,
                 listPageUrl: urls.listPageUrl,
                 // Roles
-                roleList, roleGroups, currentRoleId,
-                openRoleCreate, openRoleEdit, saveRole, deleteRole, openRoleGroups, saveRoleGroups,
+                // 2026-10-29 15:44 modified: 群組 button removed
+                roleList,
+                openRoleCreate, openRoleEdit, saveRole, deleteRole,
                 // RoleGroups
                 groupList,
                 openGroupCreate, openGroupEdit, saveGroup, deleteGroup,
                 // Modals and forms
-                roleModal, roleGroupsModal, groupModal,
+                roleModal, groupModal,
                 roleForm, groupForm, isNew, formError, busy
             };
         }

@@ -64,6 +64,26 @@ namespace jsERP.Services
             return rows.ToList();
         }
 
+        // 2026-10-29 16:15 added: page title = menu caption (SYS_PROGRAM.FORM_CAPTION) of this controller
+        // Same action first (List), then enabled rows first. A sub page (ListDet) gets the caption of its List.
+        // Return null when the controller is not in the menu.
+        public async Task<string?> PageTitle(string controllerName, string actionName)
+        {
+            using SqlConnection connection = Connect();
+
+            string sql = """
+                SELECT TOP 1 FORM_CAPTION
+                FROM SYS_PROGRAM
+                WHERE CONTROLLER_NAME = @controllerName
+                ORDER BY CASE WHEN ACTION_NAME = @actionName THEN 0 ELSE 1 END,
+                         CASE WHEN IS_ENABLED = 1 THEN 0 ELSE 1 END,
+                         SORT_NO
+                """;
+
+            return await connection.QueryFirstOrDefaultAsync<string?>(sql,
+                new { controllerName = controllerName, actionName = actionName });
+        }
+
         // 2026-10-28 09:40 added: SYS_PROGRAM master list (top menus, no parent)
         // 2026-10-28 14:00 modified: remove CODE_NO, also show disabled masters (so they can be edited)
         public async Task<List<ProgramRow>> ProgramMasterList()

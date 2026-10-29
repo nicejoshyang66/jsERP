@@ -147,15 +147,16 @@ namespace jsERP.Services
 
         // Roles of one user
         // 2026-10-29 10:51 modified: also return the groups of each role, e.g. "MAK, STK"
+        // 2026-10-29 15:44 modified: one role has one group, so return GroupId
         public async Task<List<RoleRow>> RolesOfUser(string userId)
         {
             using SqlConnection connection = Connect();
 
             string sql = """
                 SELECT R.ROLE_ID AS RoleId, R.ROLE_DESC AS RoleDesc, R.USER_ID AS UserId,
-                       (SELECT STRING_AGG(D.ROLEGROUP_ID, ', ')
+                       (SELECT TOP 1 D.ROLEGROUP_ID
                         FROM SYS_ROLEGROUPS_D D
-                        WHERE D.ROLE_ID = R.ROLE_ID) AS GroupIds
+                        WHERE D.ROLE_ID = R.ROLE_ID) AS GroupId
                 FROM SYS_ROLES R
                 WHERE R.USER_ID = @userId
                 ORDER BY R.ROLE_ID
@@ -177,23 +178,32 @@ namespace jsERP.Services
         }
 
         // Insert one role
+        // 2026-10-29 15:44 modified: also save its group (one transaction)
         public async Task<bool> RoleInsert(RoleRow role)
         {
             using SqlConnection connection = Connect();
+            connection.Open();
+            using SqlTransaction transaction = connection.BeginTransaction();
 
             string sql = """
                 INSERT INTO SYS_ROLES (ROLE_ID, ROLE_DESC, USER_ID)
                 VALUES (@RoleId, @RoleDesc, @UserId)
                 """;
 
-            int affected = await connection.ExecuteAsync(sql, role);
+            int affected = await connection.ExecuteAsync(sql, role, transaction);
+            await SaveGroupOfRole(connection, transaction, role);
+
+            transaction.Commit();
             return affected > 0;
         }
 
         // Update one role (ROLE_ID does not change)
+        // 2026-10-29 15:44 modified: also save its group (one transaction)
         public async Task<bool> RoleUpdate(RoleRow role)
         {
             using SqlConnection connection = Connect();
+            connection.Open();
+            using SqlTransaction transaction = connection.BeginTransaction();
 
             string sql = """
                 UPDATE SYS_ROLES SET
@@ -202,8 +212,41 @@ namespace jsERP.Services
                 WHERE ROLE_ID = @RoleId
                 """;
 
-            int affected = await connection.ExecuteAsync(sql, role);
-            return affected > 0;
+            int affected = await connection.ExecuteAsync(sql, role, transaction);
+            if (affected == 0)
+            {
+                // role not found, nothing to save
+                transaction.Rollback();
+                return false;
+            }
+
+            await SaveGroupOfRole(connection, transaction, role);
+
+            transaction.Commit();
+            return true;
+        }
+
+        // 2026-10-29 15:44 added: save the group of one role
+        // GroupId = ""  -> DELETE the row
+        // has a row     -> UPDATE it
+        // no row        -> INSERT one
+        private async Task SaveGroupOfRole(SqlConnection connection, SqlTransaction transaction, RoleRow role)
+        {
+            if (role.GroupId == "")
+            {
+                string deleteSql = "DELETE FROM SYS_ROLEGROUPS_D WHERE ROLE_ID = @RoleId";
+                await connection.ExecuteAsync(deleteSql, role, transaction);
+                return;
+            }
+
+            string updateSql = "UPDATE SYS_ROLEGROUPS_D SET ROLEGROUP_ID = @GroupId WHERE ROLE_ID = @RoleId";
+            int affected = await connection.ExecuteAsync(updateSql, role, transaction);
+
+            if (affected == 0)
+            {
+                string insertSql = "INSERT INTO SYS_ROLEGROUPS_D (ROLEGROUP_ID, ROLE_ID) VALUES (@GroupId, @RoleId)";
+                await connection.ExecuteAsync(insertSql, role, transaction);
+            }
         }
 
         // Delete one role, and remove it from all role groups
@@ -220,42 +263,7 @@ namespace jsERP.Services
             return affected > 0;
         }
 
-        // All role groups, and is this role in the group? (群組 button of the Roles tab)
-        public async Task<List<GroupRow>> GroupsOfRole(string roleId)
-        {
-            using SqlConnection connection = Connect();
-
-            string sql = """
-                SELECT G.ROLEGROUP_ID AS GroupId, G.ROLEGROUP_DESC AS GroupDesc,
-                       CASE WHEN EXISTS (SELECT 1 FROM SYS_ROLEGROUPS_D D
-                                         WHERE D.ROLEGROUP_ID = G.ROLEGROUP_ID AND D.ROLE_ID = @roleId)
-                            THEN 1 ELSE 0 END AS IsChecked
-                FROM SYS_ROLEGROUPS G
-                ORDER BY G.ROLEGROUP_ID
-                """;
-
-            IEnumerable<GroupRow> rows = await connection.QueryAsync<GroupRow>(sql, new { roleId = roleId });
-            return rows.ToList();
-        }
-
-        // Save the role groups of one role: delete old rows, insert checked rows
-        public async Task SaveGroupsOfRole(string roleId, List<string> groupIds)
-        {
-            using SqlConnection connection = Connect();
-            connection.Open();
-            using SqlTransaction transaction = connection.BeginTransaction();
-
-            string deleteSql = "DELETE FROM SYS_ROLEGROUPS_D WHERE ROLE_ID = @roleId";
-            await connection.ExecuteAsync(deleteSql, new { roleId = roleId }, transaction);
-
-            string insertSql = "INSERT INTO SYS_ROLEGROUPS_D (ROLEGROUP_ID, ROLE_ID) VALUES (@groupId, @roleId)";
-            foreach (string groupId in groupIds)
-            {
-                await connection.ExecuteAsync(insertSql, new { groupId = groupId, roleId = roleId }, transaction);
-            }
-
-            transaction.Commit();
-        }
+        // 2026-10-29 15:44 removed: GroupsOfRole, SaveGroupsOfRole (群組 button is removed, group is saved with the role)
 
         // ==================== RoleGroups tab (ListDet page) ====================
 
@@ -363,7 +371,7 @@ namespace jsERP.Services
         public string RoleId { get; set; } = "";
         public string? RoleDesc { get; set; }
         public string? UserId { get; set; }
-        public string? GroupIds { get; set; }      // 2026-10-29 10:51 added: groups of this role, only for showing
+        public string? GroupId { get; set; }       // 2026-10-29 15:44 modified: GroupIds -> GroupId, one role has one group ("" = none)
     }
 
     // One row of SYS_ROLEGROUPS (also used by the Vue form)
@@ -371,14 +379,9 @@ namespace jsERP.Services
     {
         public string GroupId { get; set; } = "";
         public string? GroupDesc { get; set; }
-        public int IsChecked { get; set; }         // only for the 群組 button of the Roles tab
         public string? UserRoleIds { get; set; }   // 2026-10-29 10:51 added: roles of this user in the group, only for showing
+        // 2026-10-29 15:44 removed: IsChecked (群組 button is removed)
     }
 
-    // Data of "save role groups of one role"
-    public class RoleGroupsForm
-    {
-        public string RoleId { get; set; } = "";
-        public List<string> GroupIds { get; set; } = new List<string>();
-    }
+    // 2026-10-29 15:44 removed: RoleGroupsForm (群組 button is removed)
 }

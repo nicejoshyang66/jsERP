@@ -2,7 +2,8 @@
 @* 2026-10-28 10:30 modified: add create / edit / delete, detail remark, master and detail stacked (top / bottom) *@
 @* 2026-10-28 14:00 modified: layout like the old project (xxxBackup) - this page only shows master, SubMenu goes to ListDet; remove 類別 (CODE_NO) *@
 @{
-    ViewData["Title"] = "系統程式資料維護";
+    // 2026-10-29 16:15 modified: title comes from the menu (PageTitleFilter); this text is only the default
+    ViewData["Title"] = ViewData["Title"] ?? "系統程式資料維護";
 }
 
 <!-- Vue app: program master list -->
@@ -15,7 +16,7 @@
     @Html.AntiForgeryToken()
 
     <!-- 2026-10-28 14:00 modified: title + Create Now button like the old project -->
-    <h1>系統程式資料維護</h1>
+    <h1 class="page-title">@ViewData["Title"]</h1> <!-- 2026-10-29 16:15 modified: menu caption; 2026-10-29 16:26 modified: class page-title -->
 
     <p>
         <button type="button" class="btn btn-success btn-sm" v-on:click="openCreate">
@@ -27,7 +28,8 @@
 
     <!-- 2026-10-28 14:00 modified: master table like the old project -->
     <div class="table-responsive">
-        <table class="table table-bordered table-hover align-middle">
+        <!-- 2026-10-29 18:27 modified: table-sm (smaller cell padding, fits 150% screen) -->
+        <table class="table table-sm table-bordered table-hover align-middle">
             <thead class="table-primary">
                 <tr>
                     <th>啟用</th>

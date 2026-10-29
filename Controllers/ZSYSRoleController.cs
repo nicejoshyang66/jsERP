@@ -233,25 +233,7 @@ namespace jsERP.Controllers
             return Ok(new { message = "刪除成功。" });
         }
 
-        // GET /ZSYSRole/RoleGroups?roleId=MIS00 : all groups, isChecked = 1 when the role is in it
-        public async Task<IActionResult> RoleGroups(string roleId)
-        {
-            return Json(await _repository.GroupsOfRole(roleId ?? ""));
-        }
-
-        // POST /ZSYSRole/RoleGroupsSave : save the checked groups of one role
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> RoleGroupsSave([FromBody] RoleGroupsForm form)
-        {
-            if (form == null || string.IsNullOrWhiteSpace(form.RoleId))
-            {
-                return BadRequest(new { message = "資料格式錯誤。" });
-            }
-
-            await _repository.SaveGroupsOfRole(form.RoleId.Trim(), form.GroupIds ?? new List<string>());
-            return Ok(new { message = "儲存成功。" });
-        }
+        // 2026-10-29 15:44 removed: RoleGroups, RoleGroupsSave (群組 button is removed, group is saved with the role)
 
         // Trim text and check required fields. Return "" when OK.
         private async Task<string> CheckRole(RoleRow? role)
@@ -264,6 +246,7 @@ namespace jsERP.Controllers
             role.RoleId = (role.RoleId ?? "").Trim().ToUpper();
             role.RoleDesc = (role.RoleDesc ?? "").Trim();
             role.UserId = (role.UserId ?? "").Trim();
+            role.GroupId = (role.GroupId ?? "").Trim();  // 2026-10-29 15:44 added: "" = no group
 
             if (role.RoleId == "")
             {
@@ -276,6 +259,11 @@ namespace jsERP.Controllers
             if (!await _repository.UserExists(role.UserId))
             {
                 return "找不到使用者 " + role.UserId + "。";
+            }
+            // 2026-10-29 15:44 added: the group must exist
+            if (role.GroupId != "" && !await _repository.GroupExists(role.GroupId))
+            {
+                return "找不到群組 " + role.GroupId + "。";
             }
             return "";
         }
