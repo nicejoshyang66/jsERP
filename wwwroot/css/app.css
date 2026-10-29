@@ -57,12 +57,21 @@ body {
 
 .app-submenu .nav-link {
     padding-left: 2rem;
-    font-size: 0.9rem;
+    font-size: 1rem; /* 2026-10-28 12:00 modified: same size as main menu (was 0.9rem) */
 }
 
-/* Program without controller/action yet */
-.app-menu .nav-link.menu-todo {
-    color: #6c757d;
+/* 2026-10-28 12:10 removed: .menu-todo gray style (menu is only show / hide now) */
+
+/* 2026-10-28 15:00 added: table with its own scroll bar, header stays on top */
+.table-scroll {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
 }
 
 /* ---------- Page content ---------- */

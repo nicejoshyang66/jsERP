@@ -6,8 +6,8 @@
      1. @USER_ID must exist in USERS
      2. #TB1 : ROLE_ID of the user        (SYS_ROLES)
      3. #TB2 : ROLEGROUP_ID of the roles  (SYS_ROLEGROUPS_D)   e.g. JOSH -> MIS, STK
-     4. #TB3 : FORM_ID the groups can see (SYS_PROGRAM_D, IS_VIEW = 1)
-     5. Add the parent menu of each FORM_ID, so a child never loses its parent
+     4. #TB3 : FORM_ID with IS_ENABLED = 1 and IS_VIEW = 1        2026-10-28 12:10 modified
+     5. Remove children whose parent menu is hidden              2026-10-28 12:10 modified
      6. Return SYS_PROGRAM rows of #TB3 -> MENU
 
    Note: all columns use Chinese_Taiwan_Stroke_CI_AS now (= tempdb default),
@@ -48,7 +48,7 @@ BEGIN
     /* Step 1: user not found -> empty menu */
     IF NOT EXISTS (SELECT 1 FROM USERS WHERE USERID = @USER_ID)
     BEGIN
-        SELECT ROW_ID, FORM_ID, FORM_CAPTION, PARENT_NAME, SORT_NO,
+        SELECT ROW_ID, FORM_ID, FORM_CAPTION, PARENT_ID, SORT_NO,   -- 2026-10-28 09:24 modified
                CONTROLLER_NAME, ACTION_NAME, ROUTE_NAME
         FROM SYS_PROGRAM
         WHERE 1 = 0
@@ -67,28 +67,31 @@ BEGIN
     FROM SYS_ROLEGROUPS_D D
     JOIN #TB1 A ON A.ROLE_ID = D.ROLE_ID
 
-    /* Step 4: #TB3 <- SYS_PROGRAM_D  (programs of MIS, STK) */
-    -- 2026-10-25 19:00 modified: remove COLLATE
+    /* Step 4: #TB3 <- programs that can be shown                2026-10-28 12:10 modified
+         A) SYS_PROGRAM.IS_ENABLED = 0 -> never show (do not check IS_VIEW)
+         B) SYS_PROGRAM.IS_ENABLED = 1 -> check SYS_PROGRAM_D (ROLEGROUP_ID + IS_VIEW)
+            IS_VIEW = 1 show, IS_VIEW = 0 not show */
     INSERT INTO #TB3 (FORM_ID)
-    SELECT DISTINCT P.FORM_ID
-    FROM SYS_PROGRAM_D P
-    JOIN #TB2 B ON B.ROLEGROUP_ID = P.ROLEGROUP_ID
-    WHERE P.IS_VIEW = 1
-
-    /* Step 5: add the parent menu (PARENT_NAME) if it is not in #TB3 yet */
-    INSERT INTO #TB3 (FORM_ID)
-    SELECT DISTINCT S.PARENT_NAME
+    SELECT DISTINCT S.FORM_ID
     FROM SYS_PROGRAM S
-    JOIN #TB3 C ON C.FORM_ID = S.FORM_ID
-    WHERE ISNULL(S.PARENT_NAME, '') <> ''
-      AND S.PARENT_NAME NOT IN (SELECT FORM_ID FROM #TB3)
+    JOIN SYS_PROGRAM_D P ON P.FORM_ID = S.FORM_ID
+    JOIN #TB2 B ON B.ROLEGROUP_ID = P.ROLEGROUP_ID
+    WHERE S.IS_ENABLED = 1
+      AND P.IS_VIEW = 1
+
+    /* Step 5: parent menu is hidden -> its children are hidden too   2026-10-28 12:10 modified
+       (old way added the parent back; now the parent must pass Step 4 itself) */
+    DELETE C
+    FROM #TB3 C
+    JOIN SYS_PROGRAM S ON S.FORM_ID = C.FORM_ID
+    WHERE ISNULL(S.PARENT_ID, '') <> ''
+      AND S.PARENT_ID NOT IN (SELECT FORM_ID FROM #TB3)
 
     /* Step 6: return the menu */
-    SELECT S.ROW_ID, S.FORM_ID, S.FORM_CAPTION, S.PARENT_NAME, S.SORT_NO,
+    SELECT S.ROW_ID, S.FORM_ID, S.FORM_CAPTION, S.PARENT_ID, S.SORT_NO,   -- 2026-10-28 09:24 modified
            S.CONTROLLER_NAME, S.ACTION_NAME, S.ROUTE_NAME
     FROM SYS_PROGRAM S
-    JOIN #TB3 C ON C.FORM_ID = S.FORM_ID
-    WHERE S.IS_ENABLED = 1
+    JOIN #TB3 C ON C.FORM_ID = S.FORM_ID   -- 2026-10-28 12:10 modified: IS_ENABLED checked in Step 4
     ORDER BY S.SORT_NO, S.FORM_ID
 END
 GO

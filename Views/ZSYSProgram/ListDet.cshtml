@@ -1,0 +1,192 @@
+@* 2026-10-28 14:00 added: 系統程式資料維護 - detail page of one master (layout like the old project xxxBackup) *@
+@{
+    ViewData["Title"] = "系統程式資料維護";
+}
+
+<!-- Vue app: one master + its detail programs -->
+<div id="program-det-app" v-cloak
+     data-parent-id="@ViewBag.ParentId"
+     data-master-one-url="@Url.Action("MasterOne", "ZSYSProgram")"
+     data-detail-url="@Url.Action("DetailList", "ZSYSProgram")"
+     data-create-url="@Url.Action("Create", "ZSYSProgram")"
+     data-update-url="@Url.Action("Update", "ZSYSProgram")"
+     data-delete-url="@Url.Action("Delete", "ZSYSProgram")">
+    @Html.AntiForgeryToken()
+
+    <div v-if="error" class="alert alert-danger">{{ error }}</div>
+
+    <!-- Master data (read only) -->
+    <div class="card shadow-sm mb-3" v-if="master">
+        <div class="card-body p-2">
+            <div class="table-responsive">
+                <table class="table mb-0">
+                    <tbody>
+                        <tr>
+                            <th class="text-nowrap">代號</th>
+                            <td>{{ master.formId }}</td>
+                            <th class="text-nowrap">名稱</th>
+                            <td>{{ master.formCaption }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-nowrap">排序</th>
+                            <td>{{ master.sortNo }}</td>
+                            <th class="text-nowrap">啟用</th>
+                            <td>
+                                <input type="checkbox" class="form-check-input" v-bind:checked="master.isEnabled === 1" disabled />
+                            </td>
+                        </tr>
+                        <tr>
+                            <th class="text-nowrap">備註</th>
+                            <td colspan="3">{{ master.remark }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <hr />
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">Detail 資料</h2>
+        <button type="button" class="btn btn-success" v-if="master" v-on:click="openCreate">
+            <i class="bi bi-plus-circle"></i> 新增 Detail
+        </button>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle">
+            <thead class="table-primary">
+                <tr>
+                    <th>啟用</th>
+                    <th>代號</th>
+                    <th>名稱</th>
+                    <th>排序</th>
+                    <th>Controller</th>
+                    <th>Action</th>
+                    <th>Route</th>
+                    <th>備註</th>
+                    <th>功能</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-if="detailLoading">
+                    <td colspan="9" class="text-muted">載入中…</td>
+                </tr>
+                <tr v-else-if="detailList.length === 0">
+                    <td colspan="9" class="text-muted">沒有資料。</td>
+                </tr>
+                <tr v-for="item in detailList" v-bind:key="item.rowId">
+                    <td>
+                        <input type="checkbox" class="form-check-input" v-bind:checked="item.isEnabled === 1" disabled />
+                    </td>
+                    <td>{{ item.formId }}</td>
+                    <td>{{ item.formCaption }}</td>
+                    <td>{{ item.sortNo }}</td>
+                    <td>{{ item.controllerName }}</td>
+                    <td>{{ item.actionName }}</td>
+                    <td>{{ item.routeName }}</td>
+                    <td>{{ item.remark }}</td>
+                    <td class="text-nowrap">
+                        <button type="button" class="btn btn-warning btn-sm me-1"
+                                v-on:click="openEdit(item)">修改</button>
+                        <button type="button" class="btn btn-danger btn-sm"
+                                v-on:click="deleteRow(item)">刪除</button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <a href="@Url.Action("List", "ZSYSProgram")" class="btn btn-secondary">回 Master</a>
+
+    <!-- Create / edit detail form (Bootstrap modal) -->
+    <div class="modal fade" ref="formModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <!-- 2026-10-28 11:40 modified: form as flex column so modal-body can scroll -->
+                <form v-on:submit.prevent="saveForm" class="d-flex flex-column overflow-hidden">
+                    <div class="modal-header">
+                        <h5 class="modal-title">{{ formTitle }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <div class="row g-3">
+
+                            <!-- 2026-10-28 12:30 modified: row 1 = 主選單 + 排序 (啟用 moved to row 2) -->
+                            <!-- Parent = master FORM_ID, filled in automatically -->
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">主選單</label>
+                                <input type="text" class="form-control" readonly
+                                       v-bind:value="form.parentId + ' ' + (master ? master.formCaption : '')" />
+                            </div>
+
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">排序</label>
+                                <input type="text" class="form-control" v-model="form.sortNo" maxlength="10" />
+                            </div>
+
+                            <!-- Empty space, keep row 1 width (2026-10-28 12:30 added) -->
+                            <div class="d-none d-md-block col-md-3"></div>
+
+                            <!-- 2026-10-28 12:30 modified: row 2 = 代號 + 名稱 + 啟用, same width as Controller / Action / Route -->
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">代號 <span class="text-danger">*</span></label>
+                                <!-- FORM_ID can not change after create (SYS_PROGRAM_D uses it) -->
+                                <input type="text" class="form-control" v-model="form.formId"
+                                       maxlength="30" v-bind:readonly="!isNew" required />
+                            </div>
+
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">名稱 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" v-model="form.formCaption" maxlength="100" required />
+                            </div>
+
+                            <div class="col-12 col-md-4 d-flex align-items-end">
+                                <div class="form-check mb-2">
+                                    <input type="checkbox" id="isEnabled" class="form-check-input"
+                                           v-model="form.isEnabled" v-bind:true-value="1" v-bind:false-value="0" />
+                                    <label for="isEnabled" class="form-check-label">啟用</label>
+                                </div>
+                            </div>
+
+                            <!-- 2026-10-28 11:50 modified: row 3 = Controller + Action + Route -->
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Controller</label>
+                                <input type="text" class="form-control" v-model="form.controllerName" maxlength="100" />
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Action</label>
+                                <input type="text" class="form-control" v-model="form.actionName" maxlength="100" />
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Route</label>
+                                <input type="text" class="form-control" v-model="form.routeName" maxlength="120" />
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label">備註</label>
+                                <textarea class="form-control" rows="2" v-model="form.remark" maxlength="500"></textarea>
+                            </div>
+                        </div>
+
+                        <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2">{{ formError }}</div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-primary" v-bind:disabled="busy">
+                            <span v-if="busy" class="spinner-border spinner-border-sm me-1"></span>
+                            儲存
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/zsysprogram-det.js" asp-append-version="true"></script>
+}

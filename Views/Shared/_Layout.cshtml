@@ -75,23 +75,23 @@
                     <a v-if="parent.children.length > 0" href="#" class="nav-link"
                        v-on:click.prevent="toggleMenu(parent.id)">
                         <!-- Show sort no from API (2026-10-24 18:10 modified) -->
-                        <i class="bi bi-folder me-2"></i>{{ parent.name }} {{ parent.sortNo }}
+                        <i class="bi bi-folder me-2"></i>{{ parent.name }}
                         <i class="bi float-end"
                            v-bind:class="isOpen(parent.id) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
                     </a>
 
                     <!-- Top menu without children: normal link -->
-                    <a v-else v-bind:href="parent.url" class="nav-link"
-                       v-bind:class="{ active: isActive(parent.url), 'menu-todo': parent.url === '#' }">
+                    <a v-else v-bind:href="parent.url" class="nav-link" v-bind:class="{ active: isActive(parent.url) }">
+                        <!-- 2026-10-28 12:10 modified: no gray by CONTROLLER_NAME -->
                         <!-- Show sort no from API (2026-10-24 18:10 modified) -->
-                        <i class="bi bi-file-earmark me-2"></i>{{ parent.name }} {{ parent.sortNo }}
+                        <i class="bi bi-file-earmark me-2"></i>{{ parent.name }}
                     </a>
 
                     <!-- Children -->
                     <ul v-if="isOpen(parent.id)" class="nav flex-column app-submenu">
+                        <!-- 2026-10-28 12:10 modified: no gray by CONTROLLER_NAME -->
                         <li v-for="child in parent.children" v-bind:key="child.id" class="nav-item">
-                            <a v-bind:href="child.url" class="nav-link"
-                               v-bind:class="{ active: isActive(child.url), 'menu-todo': child.url === '#' }"
+                            <a v-bind:href="child.url" class="nav-link" v-bind:class="{ active: isActive(child.url) }"
                                v-bind:title="child.code">
                                 <!-- Show sort no from API (2026-10-24 18:10 modified) -->
                                 <i class="bi bi-dot"></i>{{ child.name }} {{ child.sortNo }}

@@ -33,12 +33,12 @@ BEGIN
         ROW_ID          int IDENTITY(1,1) NOT NULL PRIMARY KEY,                   -- 2026-10-25 16:00 renamed from PROGRAM_ID
         FORM_ID         varchar(30)   NOT NULL CONSTRAINT UQ_SYS_PROGRAM_FORM_ID UNIQUE,  -- z_sys_program.mno   (= SYS_SECURITY.FORM_NAME)   2026-10-25 19:00 modified: remove COLLATE
         FORM_CAPTION    nvarchar(100) NULL,             -- z_sys_program.mname (menu text)   2026-10-25 19:00 modified: remove COLLATE
-        PARENT_NAME     varchar(30)   NULL,             -- z_sys_program.parentno (empty = top menu)   2026-10-25 19:00 modified: remove COLLATE
+        PARENT_ID       varchar(30)   NULL,             -- z_sys_program.parentno (empty = top menu)   2026-10-28 09:24 modified: PARENT_NAME -> PARENT_ID
         SORT_NO         varchar(10)   NULL,             -- z_sys_program.no_sort   2026-10-25 19:00 modified: remove COLLATE
         CONTROLLER_NAME varchar(100)  NULL,             -- z_sys_program.controllername   2026-10-25 19:00 modified: remove COLLATE
         ACTION_NAME     varchar(100)  NULL,             -- z_sys_program.actionname   2026-10-25 19:00 modified: remove COLLATE
         ROUTE_NAME      varchar(120)  NULL,             -- z_sys_program.routename (query string)   2026-10-25 19:00 modified: remove COLLATE
-        CODE_NO         varchar(10)   NULL,             -- z_sys_program.code_no (M = admin, U = user)   2026-10-25 19:00 modified: remove COLLATE
+        -- 2026-10-28 14:00 removed: CODE_NO (not used any more)
         IS_ENABLED      int            NOT NULL DEFAULT 1,
         REMARK          nvarchar(500)  NULL
     );
@@ -55,12 +55,22 @@ IF COL_LENGTH('dbo.SYS_PROGRAM', 'FORM_NAME') IS NOT NULL
     EXEC sp_rename 'dbo.SYS_PROGRAM.FORM_NAME', 'FORM_ID', 'COLUMN';
 GO
 
+-- Rename PARENT_NAME -> PARENT_ID for databases created before this change   2026-10-28 09:24 added
+IF COL_LENGTH('dbo.SYS_PROGRAM', 'PARENT_NAME') IS NOT NULL
+    EXEC sp_rename 'dbo.SYS_PROGRAM.PARENT_NAME', 'PARENT_ID', 'COLUMN';
+GO
+
+-- Drop CODE_NO for databases created before this change   2026-10-28 14:00 added
+IF COL_LENGTH('dbo.SYS_PROGRAM', 'CODE_NO') IS NOT NULL
+    ALTER TABLE dbo.SYS_PROGRAM DROP COLUMN CODE_NO;
+GO
+
 -- Copy programs that are not in SYS_PROGRAM yet
 INSERT INTO dbo.SYS_PROGRAM
-    (FORM_ID, FORM_CAPTION, PARENT_NAME, SORT_NO, CONTROLLER_NAME, ACTION_NAME, ROUTE_NAME, CODE_NO, IS_ENABLED, REMARK)
+    (FORM_ID, FORM_CAPTION, PARENT_ID, SORT_NO, CONTROLLER_NAME, ACTION_NAME, ROUTE_NAME, IS_ENABLED, REMARK)   -- 2026-10-28 14:00 modified: remove CODE_NO
 SELECT
     p.mno, p.mname, ISNULL(p.parentno, ''), p.no_sort, p.controllername, p.actionname, p.routename,
-    UPPER(p.code_no), ISNULL(p.is_enabled, 0), p.remark
+    ISNULL(p.is_enabled, 0), p.remark   -- 2026-10-28 14:00 modified: remove CODE_NO
 FROM mvcstore.dbo.z_sys_program p
 WHERE p.mno IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM dbo.SYS_PROGRAM s WHERE s.FORM_ID = p.mno);  -- 2026-10-25 19:00 modified: remove COLLATE
@@ -69,12 +79,15 @@ GO
 /* ---------- Step 3: SYS_SECURITY (which role group can use which program) ---------- */
 -- MIS group: all programs (M + U)
 -- ACC / MAK / PUR / SAL / STK groups: user programs (U)
+-- 2026-10-28 14:00 modified: SYS_PROGRAM has no CODE_NO now, read it from the old table z_sys_program
 INSERT INTO dbo.SYS_SECURITY (ROLEGROUP_ID, FORM_NAME, FORM_CAPTION, ACTIVE)
 SELECT g.ROLEGROUP_ID, p.FORM_ID, p.FORM_CAPTION, 'Y'   -- 2026-10-25 16:30 modified
 FROM dbo.SYS_ROLEGROUPS g
 JOIN dbo.SYS_PROGRAM p
   ON g.ROLEGROUP_ID = 'MIS'
-  OR (g.ROLEGROUP_ID IN ('ACC', 'MAK', 'PUR', 'SAL', 'STK') AND p.CODE_NO = 'U')
+  OR (g.ROLEGROUP_ID IN ('ACC', 'MAK', 'PUR', 'SAL', 'STK')
+      AND EXISTS (SELECT 1 FROM mvcstore.dbo.z_sys_program z
+                  WHERE z.mno = p.FORM_ID AND UPPER(z.code_no) = 'U'))
 WHERE NOT EXISTS (
     SELECT 1 FROM dbo.SYS_SECURITY s
     WHERE s.ROLEGROUP_ID = g.ROLEGROUP_ID AND s.FORM_NAME = p.FORM_ID   -- 2026-10-25 16:30 modified
@@ -82,7 +95,7 @@ WHERE NOT EXISTS (
 GO
 
 /* ---------- Check: menu of one user ---------- */
-SELECT DISTINCT p.FORM_ID, p.FORM_CAPTION, p.PARENT_NAME, p.SORT_NO   -- 2026-10-25 16:30 modified
+SELECT DISTINCT p.FORM_ID, p.FORM_CAPTION, p.PARENT_ID, p.SORT_NO   -- 2026-10-28 09:24 modified: PARENT_NAME -> PARENT_ID
 FROM dbo.USERS u
 JOIN dbo.SYS_ROLES r         ON r.USER_ID = u.USERID
 JOIN dbo.SYS_ROLEGROUPS_D gd ON gd.ROLE_ID = r.ROLE_ID

@@ -5,6 +5,7 @@ builder.Services.AddControllersWithViews();
 
 // 2026-10-24 17:35 added: database repository (login + menu)
 builder.Services.AddScoped<jsERP.Services.ErpRepository>();
+builder.Services.AddScoped<jsERP.Services.RoleRepository>(); // 2026-10-28 15:00 added: 角色資料維護
 
 // 2026-10-24 17:35 added: cookie login
 builder.Services.AddAuthentication("ErpCookie").AddCookie("ErpCookie", option =>

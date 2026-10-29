@@ -43,8 +43,8 @@ namespace jsERP.Controllers
                 foreach (MenuRow root in rows)
                 {
                     // A row is a top menu when it has no parent, or its parent is not in the list
-                    bool hasParent = !string.IsNullOrWhiteSpace(root.PARENT_NAME);
-                    if (hasParent && formNames.Contains(root.PARENT_NAME!))
+                    bool hasParent = !string.IsNullOrWhiteSpace(root.PARENT_ID); // 2026-10-28 09:24 modified
+                    if (hasParent && formNames.Contains(root.PARENT_ID!)) // 2026-10-28 09:24 modified
                     {
                         continue;
                     }
@@ -52,7 +52,7 @@ namespace jsERP.Controllers
                     List<object> children = new List<object>();
                     foreach (MenuRow child in rows)
                     {
-                        if (child.PARENT_NAME == root.FORM_ID) // 2026-10-25 16:30 modified
+                        if (child.PARENT_ID == root.FORM_ID) // 2026-10-28 09:24 modified: PARENT_NAME -> PARENT_ID
                         {
                             children.Add(new
                             {

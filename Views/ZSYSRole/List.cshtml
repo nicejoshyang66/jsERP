@@ -1,0 +1,180 @@
+@* 2026-10-28 15:00 added: 角色資料維護 - one page, 3 tabs (Users / Roles / Role Groups), Vue *@
+@* 2026-10-29 10:51 modified: this page only shows users (add / edit / delete), 設定群組 goes to ListDet *@
+@{
+    ViewData["Title"] = "角色資料維護";
+}
+
+<!-- Vue app: user list -->
+<div id="role-app" v-cloak
+     data-user-list-url="@Url.Action("UserList", "ZSYSRole")"
+     data-user-create-url="@Url.Action("UserCreate", "ZSYSRole")"
+     data-user-update-url="@Url.Action("UserUpdate", "ZSYSRole")"
+     data-user-delete-url="@Url.Action("UserDelete", "ZSYSRole")"
+     data-user-password-url="@Url.Action("UserPassword", "ZSYSRole")"
+     data-det-page-url="@Url.Action("ListDet", "ZSYSRole")">
+    @Html.AntiForgeryToken()
+
+    <h1>角色資料維護</h1>
+
+    <!-- 2026-10-29 10:51 modified: Create New button like 登入帳戶資料維護 -->
+    <p>
+        <button type="button" class="btn btn-success btn-sm" v-on:click="openCreate">
+            <i class="bi bi-plus-circle"></i> Create New
+        </button>
+    </p>
+
+    <div v-if="error" class="alert alert-danger">{{ error }}</div>
+
+    <!-- 2026-10-29 10:51 modified: user table, no search box -->
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle">
+            <thead class="table-primary">
+                <tr>
+                    <!-- 2026-10-29 13:13 added: 密碼 (lock button), 啟用 (IS_ACTIVE) -->
+                    <th class="text-nowrap">密碼</th>
+                    <th class="text-nowrap">啟用</th>
+                    <th>代號</th>
+                    <th>名稱</th>
+                    <th>電話</th>
+                    <th>手機</th>
+                    <th>電子郵件</th>
+                    <th>備註</th>
+                    <th>功能</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- 2026-10-29 13:13 modified: colspan 7 -> 9 -->
+                <tr v-if="loading">
+                    <td colspan="9" class="text-muted">載入中…</td>
+                </tr>
+                <tr v-else-if="userList.length === 0">
+                    <td colspan="9" class="text-muted">沒有資料。</td>
+                </tr>
+                <tr v-for="item in userList" v-bind:key="item.userId">
+                    <!-- 2026-10-29 13:13 added: lock button opens the change password modal -->
+                    <td class="text-center">
+                        <button type="button" class="btn btn-warning btn-sm" v-on:click="openPassword(item)">
+                            <i class="bi bi-lock-fill"></i>
+                        </button>
+                    </td>
+                    <!-- 2026-10-29 13:13 added: IS_ACTIVE, only for showing (change it in Edit) -->
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input" v-bind:checked="item.isActive === 1" disabled />
+                    </td>
+                    <td>{{ item.userId }}</td>
+                    <td>{{ item.userName }}</td>
+                    <td class="text-nowrap">{{ item.tel }}</td>
+                    <td class="text-nowrap">{{ item.mobile }}</td>
+                    <td>{{ item.email }}</td>
+                    <td>{{ item.description }}</td>
+                    <td class="text-nowrap">
+                        <button type="button" class="btn btn-outline-primary btn-sm me-1"
+                                v-on:click="openEdit(item)">Edit</button>
+                        <button type="button" class="btn btn-outline-danger btn-sm me-1"
+                                v-on:click="deleteUser(item)">Delete</button>
+                        <!-- 2026-10-29 10:51 added: go to roles / role groups of this user -->
+                        <a class="btn btn-primary btn-sm" v-bind:href="detPageUrl(item)">設定群組</a>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ==================== Modal: user form ==================== -->
+    <div class="modal fade" ref="userModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <form v-on:submit.prevent="saveUser" class="d-flex flex-column overflow-hidden">
+                    <div class="modal-header">
+                        <h5 class="modal-title">{{ isNew ? '新增使用者' : '修改使用者' }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <!-- 2026-10-29 13:13 modified: labels without English; 密碼 / AutoLogin removed -->
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">帳號 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" v-model="userForm.userId"
+                                       maxlength="20" v-bind:readonly="!isNew" required />
+                                <div v-if="isNew" class="form-text">預設密碼與帳號相同。</div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">姓名 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" v-model="userForm.userName" maxlength="30" required />
+                            </div>
+                            <!-- 2026-10-29 10:51 added: TEL, MOBILE -->
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">電話</label>
+                                <input type="text" class="form-control" v-model="userForm.tel" maxlength="12" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">手機</label>
+                                <input type="text" class="form-control" v-model="userForm.mobile" maxlength="12" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Email</label>
+                                <input type="text" class="form-control" v-model="userForm.email" maxlength="40" />
+                            </div>
+                            <!-- 2026-10-29 13:13 added: IS_ACTIVE (only when editing; a new user is always 1) -->
+                            <div v-if="!isNew" class="col-12">
+                                <div class="form-check">
+                                    <input type="checkbox" id="isActive" class="form-check-input"
+                                           v-model="userForm.isActive" v-bind:true-value="1" v-bind:false-value="0" />
+                                    <label for="isActive" class="form-check-label">啟用</label>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">備註</label>
+                                <input type="text" class="form-control" v-model="userForm.description" maxlength="100" />
+                            </div>
+                        </div>
+                        <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2">{{ formError }}</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-primary" v-bind:disabled="busy">儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== Modal: change password ==================== -->
+    <!-- 2026-10-29 13:13 added: like 密碼變更 of 登入帳戶資料維護 (plain text, encryption later) -->
+    <div class="modal fade" ref="passwordModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form v-on:submit.prevent="savePassword">
+                    <div class="modal-header bg-dark text-white">
+                        <h5 class="modal-title"><i class="bi bi-lock-fill"></i> 密碼變更</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-secondary py-2">
+                            帳號：<span class="fw-bold">{{ passwordForm.userId }} {{ passwordForm.userName }}</span>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">新的密碼</label>
+                            <input type="password" class="form-control" v-model="passwordForm.newPassword"
+                                   maxlength="50" autocomplete="new-password" required />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">確認密碼</label>
+                            <input type="password" class="form-control" v-model="passwordForm.confirmPassword"
+                                   maxlength="50" autocomplete="new-password" required />
+                        </div>
+                        <div v-if="passwordError" class="alert alert-danger mb-0 py-2">{{ passwordError }}</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-primary" v-bind:disabled="busy">儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/zsysrole.js" asp-append-version="true"></script>
+}
