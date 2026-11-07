@@ -1,0 +1,18 @@
+{
+    "html-css-class-completion.HTMLLanguages": [
+        "html",
+        "vue",
+        "razor",
+        "aspnetcorerazor",
+        "blade",
+        "handlebars",
+        "twig",
+        "django-html",
+        "php",
+        "markdown",
+        "erb",
+        "ejs",
+        "svelte"
+    ],
+    "html-css-class-completion.excludeGlobPattern": "{**/bin/**,**/obj/**,**/node_modules/**}"
+}
