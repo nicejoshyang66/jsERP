@@ -1,0 +1,192 @@
+@* 2026-10-30 19:32 added: 角色群組設定 - left: role groups, right: roles in the selected group *@
+@{
+    // title comes from the menu (PageTitleFilter); this text is only the default
+    ViewData["Title"] = ViewData["Title"] ?? "角色群組設定";
+}
+
+<!-- Vue app: role groups + roles in one group -->
+<div id="role-group-app" v-cloak
+     data-group-list-url="@Url.Action("GroupList", "ZSYSRoleGroup")"
+     data-group-create-url="@Url.Action("GroupCreate", "ZSYSRoleGroup")"
+     data-group-update-url="@Url.Action("GroupUpdate", "ZSYSRoleGroup")"
+     data-group-delete-url="@Url.Action("GroupDelete", "ZSYSRoleGroup")"
+     data-group-role-list-url="@Url.Action("GroupRoleList", "ZSYSRoleGroup")"
+     data-free-role-list-url="@Url.Action("FreeRoleList", "ZSYSRoleGroup")"
+     data-group-role-create-url="@Url.Action("GroupRoleCreate", "ZSYSRoleGroup")"
+     data-group-role-update-url="@Url.Action("GroupRoleUpdate", "ZSYSRoleGroup")"
+     data-group-role-delete-url="@Url.Action("GroupRoleDelete", "ZSYSRoleGroup")">
+    @Html.AntiForgeryToken()
+
+    <h1 class="page-title">@ViewData["Title"]</h1>
+
+    <div v-if="error" class="alert alert-danger">{{ error }}</div>
+
+    <!-- big screen: left / right, small screen: top / bottom -->
+    <div class="row g-3">
+
+        <!-- ==================== Left: role groups ==================== -->
+        <div class="col-12 col-lg-5">
+            <p>
+                <button type="button" class="btn btn-success btn-sm" v-on:click="openGroupCreate">
+                    <i class="bi bi-plus-circle"></i> 新增群組
+                </button>
+            </p>
+
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered table-hover align-middle">
+                    <thead class="table-primary">
+                        <tr>
+                            <th>群組代號</th>
+                            <th>群組說明</th>
+                            <th>功能</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-if="groupList.length === 0">
+                            <td colspan="3" class="text-muted">沒有資料。</td>
+                        </tr>
+                        <!-- click a row -> show its roles on the right; the selected row is blue -->
+                        <tr v-for="item in groupList" v-bind:key="item.groupId"
+                            v-bind:class="{ 'table-info': item.groupId === selectedGroupId }"
+                            style="cursor: pointer;"
+                            v-on:click="selectGroup(item)">
+                            <td>{{ item.groupId }}</td>
+                            <td>{{ item.groupDesc }}</td>
+                            <td class="text-nowrap">
+                                <!-- .stop: clicking the button does not select the row -->
+                                <button type="button" class="btn btn-outline-primary btn-sm me-1"
+                                        v-on:click.stop="openGroupEdit(item)">Edit</button>
+                                <button type="button" class="btn btn-outline-danger btn-sm"
+                                        v-on:click.stop="deleteGroup(item)">Delete</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ==================== Right: roles in the selected group ==================== -->
+        <div class="col-12 col-lg-7">
+            <div v-if="selectedGroupId === ''" class="alert alert-secondary">
+                請點選左邊的群組。
+            </div>
+
+            <div v-else>
+                <div class="d-flex align-items-center mb-3">
+                    <button type="button" class="btn btn-success btn-sm" v-on:click="openRoleCreate">
+                        <i class="bi bi-plus-circle"></i> 新增角色
+                    </button>
+                    <span class="ms-3 fw-bold">群組：{{ selectedGroupId }}</span>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-hover align-middle">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>角色代號</th>
+                                <th>角色說明</th>
+                                <th>使用者名稱</th>
+                                <th>功能</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-if="roleList.length === 0">
+                                <td colspan="4" class="text-muted">此群組沒有角色。</td>
+                            </tr>
+                            <tr v-for="item in roleList" v-bind:key="item.roleId">
+                                <td>{{ item.roleId }}</td>
+                                <td>{{ item.roleDesc }}</td>
+                                <td>{{ item.userName }}</td>
+                                <td class="text-nowrap">
+                                    <button type="button" class="btn btn-outline-primary btn-sm me-1"
+                                            v-on:click="openRoleEdit(item)">Edit</button>
+                                    <button type="button" class="btn btn-outline-danger btn-sm"
+                                            v-on:click="deleteRole(item)">Delete</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== Modal: role group form (2 fields) ==================== -->
+    <div class="modal fade" ref="groupModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <form v-on:submit.prevent="saveGroup" class="d-flex flex-column overflow-hidden">
+                    <div class="modal-header">
+                        <h5 class="modal-title">{{ isNew ? '新增群組' : '修改群組' }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">群組代號 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" v-model="groupForm.groupId"
+                                       maxlength="12" v-bind:readonly="!isNew" required />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">群組說明</label>
+                                <input type="text" class="form-control" v-model="groupForm.groupDesc" maxlength="40" />
+                            </div>
+                        </div>
+                        <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2">{{ formError }}</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-primary" v-bind:disabled="busy">儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== Modal: role in group form ==================== -->
+    <div class="modal fade" ref="roleModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <form v-on:submit.prevent="saveRole" class="d-flex flex-column overflow-hidden">
+                    <div class="modal-header">
+                        <h5 class="modal-title">{{ isNew ? '新增角色' : '修改角色' }}（群組 {{ selectedGroupId }}）</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <!-- only roles that have no group yet -->
+                            <div class="col-12">
+                                <label class="form-label">角色代號 <span class="text-danger">*</span></label>
+                                <select class="form-select" v-model="roleForm.roleId" required>
+                                    <option value="">（請選擇）</option>
+                                    <option v-for="r in freeRoleList" v-bind:key="r.roleId" v-bind:value="r.roleId">
+                                        {{ r.roleId }}
+                                    </option>
+                                </select>
+                                <div v-if="freeRoleList.length === 0" class="form-text">沒有未設定群組的角色。</div>
+                            </div>
+                            <!-- shown from the selected role, can not be changed -->
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">角色說明</label>
+                                <input type="text" class="form-control" v-bind:value="selectedRole().roleDesc" readonly />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">使用者名稱</label>
+                                <input type="text" class="form-control" v-bind:value="selectedRole().userName" readonly />
+                            </div>
+                        </div>
+                        <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2">{{ formError }}</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-primary" v-bind:disabled="busy">儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/zsysrolegroup.js" asp-append-version="true"></script>
+}

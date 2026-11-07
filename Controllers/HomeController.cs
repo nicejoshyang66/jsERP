@@ -5,7 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace jsERP.Controllers
 {
-    [Authorize] // 2026-10-24 17:35 added: must login first
+    //must login first
+    [Authorize]
     public class HomeController : Controller
     {
         private readonly ILogger<HomeController> _logger;
@@ -25,11 +26,13 @@ namespace jsERP.Controllers
             return View();
         }
 
-        [AllowAnonymous] // 2026-10-24 17:35 added: error page does not need login
+        [AllowAnonymous]
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
         {
             return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
         }
+
+
     }
 }

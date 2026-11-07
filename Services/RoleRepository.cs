@@ -1,5 +1,6 @@
 // 2026-10-28 15:00 added: 角色資料維護 (USERS / SYS_ROLES / SYS_ROLEGROUPS / SYS_ROLEGROUPS_D)
 // 2026-10-29 10:51 modified: 2 pages - List (users) and ListDet (roles / role groups of one user)
+// 2026-10-30 19:32 modified: one page List, tabs Users / Roles. Role groups moved to RoleGroupRepository (ZSYSRoleGroup)
 // Note: these tables have no primary key, so we check "already exists" in code.
 using Dapper;
 using Microsoft.Data.SqlClient;
@@ -35,10 +36,22 @@ namespace jsERP.Services
         {
             using SqlConnection connection = Connect();
 
+            // 2026-10-30 21:00 modified: add Groups (e.g. "ACC,MIS"), joined by STRING_AGG, no loop
+            //   USERS -> SYS_ROLES -> SYS_ROLEGROUPS_D ; DISTINCT because one user may have many roles
+            // 2026-10-31 13:35 modified: remove WITHIN GROUP (ORDER BY ...) for simpler syntax; order does not matter
             string sql = """
                 SELECT USERID AS UserId, USERNAME AS UserName,
                        EMAIL AS Email, DESCRIPTION AS Description,
-                       TEL AS Tel, MOBILE AS Mobile, IS_ACTIVE AS IsActive
+                       TEL AS Tel, MOBILE AS Mobile, IS_ACTIVE AS IsActive,
+                       ISNULL((
+                           SELECT STRING_AGG(G.ROLEGROUP_ID, ',')
+                           FROM (
+                               SELECT DISTINCT SYS_ROLEGROUPS_D.ROLEGROUP_ID
+                               FROM SYS_ROLES
+                               JOIN SYS_ROLEGROUPS_D ON SYS_ROLEGROUPS_D.ROLE_ID = SYS_ROLES.ROLE_ID
+                               WHERE SYS_ROLES.USER_ID = USERS.USERID
+                           ) AS G
+                       ), '') AS Groups
                 FROM USERS
                 ORDER BY USERID
                 """;
@@ -47,20 +60,7 @@ namespace jsERP.Services
             return rows.ToList();
         }
 
-        // 2026-10-29 10:51 added: one user (top of the ListDet page). Return null when not found.
-        public async Task<UserRow?> UserOne(string userId)
-        {
-            using SqlConnection connection = Connect();
-
-            string sql = """
-                SELECT USERID AS UserId, USERNAME AS UserName, DESCRIPTION AS Description,
-                       TEL AS Tel, MOBILE AS Mobile
-                FROM USERS
-                WHERE USERID = @userId
-                """;
-
-            return await connection.QueryFirstOrDefaultAsync<UserRow>(sql, new { userId = userId });
-        }
+        // 2026-10-30 19:32 removed: UserOne (ListDet page is removed)
 
         // Is this USERID used already?
         public async Task<bool> UserExists(string userId)
@@ -143,26 +143,22 @@ namespace jsERP.Services
             return affected > 0;
         }
 
-        // ==================== Roles tab (ListDet page) ====================
+        // ==================== Roles tab (List page) ====================
 
-        // Roles of one user
-        // 2026-10-29 10:51 modified: also return the groups of each role, e.g. "MAK, STK"
-        // 2026-10-29 15:44 modified: one role has one group, so return GroupId
-        public async Task<List<RoleRow>> RolesOfUser(string userId)
+        // 2026-10-30 19:32 modified: RolesOfUser -> RoleList, ALL roles + user name (LEFT JOIN USERS)
+        public async Task<List<RoleRow>> RoleList()
         {
             using SqlConnection connection = Connect();
 
             string sql = """
-                SELECT R.ROLE_ID AS RoleId, R.ROLE_DESC AS RoleDesc, R.USER_ID AS UserId,
-                       (SELECT TOP 1 D.ROLEGROUP_ID
-                        FROM SYS_ROLEGROUPS_D D
-                        WHERE D.ROLE_ID = R.ROLE_ID) AS GroupId
-                FROM SYS_ROLES R
-                WHERE R.USER_ID = @userId
-                ORDER BY R.ROLE_ID
+                SELECT SYS_ROLES.ROLE_ID AS RoleId, SYS_ROLES.ROLE_DESC AS RoleDesc,
+                       SYS_ROLES.USER_ID AS UserId, USERS.USERNAME AS UserName
+                FROM SYS_ROLES
+                LEFT JOIN USERS ON SYS_ROLES.USER_ID = USERS.USERID
+                ORDER BY SYS_ROLES.ROLE_ID
                 """;
 
-            IEnumerable<RoleRow> rows = await connection.QueryAsync<RoleRow>(sql, new { userId = userId });
+            IEnumerable<RoleRow> rows = await connection.QueryAsync<RoleRow>(sql);
             return rows.ToList();
         }
 
@@ -178,32 +174,25 @@ namespace jsERP.Services
         }
 
         // Insert one role
-        // 2026-10-29 15:44 modified: also save its group (one transaction)
+        // 2026-10-30 19:32 modified: only SYS_ROLES (the group is set in 角色群組設定 ZSYSRoleGroup)
         public async Task<bool> RoleInsert(RoleRow role)
         {
             using SqlConnection connection = Connect();
-            connection.Open();
-            using SqlTransaction transaction = connection.BeginTransaction();
 
             string sql = """
                 INSERT INTO SYS_ROLES (ROLE_ID, ROLE_DESC, USER_ID)
                 VALUES (@RoleId, @RoleDesc, @UserId)
                 """;
 
-            int affected = await connection.ExecuteAsync(sql, role, transaction);
-            await SaveGroupOfRole(connection, transaction, role);
-
-            transaction.Commit();
+            int affected = await connection.ExecuteAsync(sql, role);
             return affected > 0;
         }
 
         // Update one role (ROLE_ID does not change)
-        // 2026-10-29 15:44 modified: also save its group (one transaction)
+        // 2026-10-30 19:32 modified: only SYS_ROLES (the group is set in 角色群組設定 ZSYSRoleGroup)
         public async Task<bool> RoleUpdate(RoleRow role)
         {
             using SqlConnection connection = Connect();
-            connection.Open();
-            using SqlTransaction transaction = connection.BeginTransaction();
 
             string sql = """
                 UPDATE SYS_ROLES SET
@@ -212,42 +201,11 @@ namespace jsERP.Services
                 WHERE ROLE_ID = @RoleId
                 """;
 
-            int affected = await connection.ExecuteAsync(sql, role, transaction);
-            if (affected == 0)
-            {
-                // role not found, nothing to save
-                transaction.Rollback();
-                return false;
-            }
-
-            await SaveGroupOfRole(connection, transaction, role);
-
-            transaction.Commit();
-            return true;
+            int affected = await connection.ExecuteAsync(sql, role);
+            return affected > 0;
         }
 
-        // 2026-10-29 15:44 added: save the group of one role
-        // GroupId = ""  -> DELETE the row
-        // has a row     -> UPDATE it
-        // no row        -> INSERT one
-        private async Task SaveGroupOfRole(SqlConnection connection, SqlTransaction transaction, RoleRow role)
-        {
-            if (role.GroupId == "")
-            {
-                string deleteSql = "DELETE FROM SYS_ROLEGROUPS_D WHERE ROLE_ID = @RoleId";
-                await connection.ExecuteAsync(deleteSql, role, transaction);
-                return;
-            }
-
-            string updateSql = "UPDATE SYS_ROLEGROUPS_D SET ROLEGROUP_ID = @GroupId WHERE ROLE_ID = @RoleId";
-            int affected = await connection.ExecuteAsync(updateSql, role, transaction);
-
-            if (affected == 0)
-            {
-                string insertSql = "INSERT INTO SYS_ROLEGROUPS_D (ROLEGROUP_ID, ROLE_ID) VALUES (@GroupId, @RoleId)";
-                await connection.ExecuteAsync(insertSql, role, transaction);
-            }
-        }
+        // 2026-10-30 19:32 removed: SaveGroupOfRole (the group is set in 角色群組設定 ZSYSRoleGroup)
 
         // Delete one role, and remove it from all role groups
         public async Task<bool> RoleDelete(string roleId)
@@ -265,83 +223,8 @@ namespace jsERP.Services
 
         // 2026-10-29 15:44 removed: GroupsOfRole, SaveGroupsOfRole (群組 button is removed, group is saved with the role)
 
-        // ==================== RoleGroups tab (ListDet page) ====================
-
-        // 2026-10-29 10:51 modified: all role groups, and which roles of this user are in each group
-        // UserRoleIds is empty when the user is not in the group.
-        public async Task<List<GroupRow>> GroupList(string userId)
-        {
-            using SqlConnection connection = Connect();
-
-            string sql = """
-                SELECT G.ROLEGROUP_ID AS GroupId, G.ROLEGROUP_DESC AS GroupDesc,
-                       (SELECT STRING_AGG(D.ROLE_ID, ', ')
-                        FROM SYS_ROLEGROUPS_D D
-                        INNER JOIN SYS_ROLES R ON R.ROLE_ID = D.ROLE_ID
-                        WHERE D.ROLEGROUP_ID = G.ROLEGROUP_ID AND R.USER_ID = @userId) AS UserRoleIds
-                FROM SYS_ROLEGROUPS G
-                ORDER BY G.ROLEGROUP_ID
-                """;
-
-            IEnumerable<GroupRow> rows = await connection.QueryAsync<GroupRow>(sql, new { userId = userId });
-            return rows.ToList();
-        }
-
-        // Is this ROLEGROUP_ID used already?
-        public async Task<bool> GroupExists(string groupId)
-        {
-            using SqlConnection connection = Connect();
-
-            string sql = "SELECT COUNT(*) FROM SYS_ROLEGROUPS WHERE ROLEGROUP_ID = @groupId";
-
-            int count = await connection.ExecuteScalarAsync<int>(sql, new { groupId = groupId });
-            return count > 0;
-        }
-
-        // Insert one role group. TR_SYS_ROLEGROUPS adds the SYS_PROGRAM_D rows.
-        public async Task<bool> GroupInsert(GroupRow group)
-        {
-            using SqlConnection connection = Connect();
-
-            string sql = """
-                INSERT INTO SYS_ROLEGROUPS (ROLEGROUP_ID, ROLEGROUP_DESC)
-                VALUES (@GroupId, @GroupDesc)
-                """;
-
-            int affected = await connection.ExecuteAsync(sql, group);
-            return affected > 0;
-        }
-
-        // Update one role group (ROLEGROUP_ID does not change)
-        public async Task<bool> GroupUpdate(GroupRow group)
-        {
-            using SqlConnection connection = Connect();
-
-            string sql = """
-                UPDATE SYS_ROLEGROUPS SET ROLEGROUP_DESC = @GroupDesc
-                WHERE ROLEGROUP_ID = @GroupId
-                """;
-
-            int affected = await connection.ExecuteAsync(sql, group);
-            return affected > 0;
-        }
-
-        // Delete one role group and its roles. TR_SYS_ROLEGROUPS deletes the SYS_PROGRAM_D rows.
-        public async Task<bool> GroupDelete(string groupId)
-        {
-            using SqlConnection connection = Connect();
-
-            string sql = """
-                DELETE FROM SYS_ROLEGROUPS_D WHERE ROLEGROUP_ID = @groupId;
-                DELETE FROM SYS_ROLEGROUPS WHERE ROLEGROUP_ID = @groupId;
-                """;
-
-            int affected = await connection.ExecuteAsync(sql, new { groupId = groupId });
-            return affected > 0;
-        }
-
-        // 2026-10-29 10:51 removed: RoleList, RolesOfGroup, GroupRoleExists, GroupRoleInsert, GroupRoleDelete
-        // (role <-> group is now set by the 群組 button of the Roles tab)
+        // 2026-10-30 19:32 removed: RoleGroups section (GroupList, GroupExists, GroupInsert, GroupUpdate, GroupDelete)
+        // moved to RoleGroupRepository (角色群組設定 ZSYSRoleGroup)
     }
 
     // One row of USERS (also used by the Vue form)
@@ -354,6 +237,7 @@ namespace jsERP.Services
         public string? Tel { get; set; }           // 2026-10-29 10:51 added
         public string? Mobile { get; set; }        // 2026-10-29 10:51 added
         public int? IsActive { get; set; }         // 2026-10-29 13:13 added: IS_ACTIVE, 0 = not active, 1 = active
+        public string? Groups { get; set; }        // 2026-10-30 21:00 added: role groups of the user, list page only
         // 2026-10-29 13:13 removed: Password, AutoLogin (password is changed by the lock button)
     }
 
@@ -371,17 +255,9 @@ namespace jsERP.Services
         public string RoleId { get; set; } = "";
         public string? RoleDesc { get; set; }
         public string? UserId { get; set; }
-        public string? GroupId { get; set; }       // 2026-10-29 15:44 modified: GroupIds -> GroupId, one role has one group ("" = none)
+        public string? UserName { get; set; }      // 2026-10-30 19:32 added: USERS.USERNAME, only for showing
+        // 2026-10-30 19:32 removed: GroupId (the group is set in 角色群組設定 ZSYSRoleGroup)
     }
 
-    // One row of SYS_ROLEGROUPS (also used by the Vue form)
-    public class GroupRow
-    {
-        public string GroupId { get; set; } = "";
-        public string? GroupDesc { get; set; }
-        public string? UserRoleIds { get; set; }   // 2026-10-29 10:51 added: roles of this user in the group, only for showing
-        // 2026-10-29 15:44 removed: IsChecked (群組 button is removed)
-    }
-
-    // 2026-10-29 15:44 removed: RoleGroupsForm (群組 button is removed)
+    // 2026-10-30 19:32 removed: GroupRow (moved to RoleGroupRepository)
 }

@@ -2,6 +2,8 @@
 // 2026-10-29 10:51 modified: 2 pages
 //   List    : users (add / edit / delete), 設定群組 button goes to ListDet
 //   ListDet : one user on top, tabs Roles / RoleGroups below
+// 2026-10-30 19:32 modified: one page List, tabs Users / Roles (ListDet removed)
+//   Role groups moved to ZSYSRoleGroupController (角色群組設定)
 using jsERP.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,31 +26,17 @@ namespace jsERP.Controllers
             return View();
         }
 
-        // 2026-10-29 10:51 added: GET /ZSYSRole/ListDet?userId=JOSH : roles / role groups of one user (data is loaded by Vue)
-        public IActionResult ListDet(string userId)
-        {
-            ViewBag.UserId = userId ?? "";
-            return View();
-        }
+        // 2026-10-30 19:32 removed: ListDet (設定群組 button is removed)
 
-        // ==================== Users (List page) ====================
+        // ==================== Users tab (List page) ====================
 
-        // GET /ZSYSRole/UserList
+        // GET /ZSYSRole/UserList (also the options of the USER_ID select in the role form)
         public async Task<IActionResult> UserList()
         {
             return Json(await _repository.UserList());
         }
 
-        // 2026-10-29 10:51 added: GET /ZSYSRole/UserOne?userId=JOSH : one user (top of ListDet)
-        public async Task<IActionResult> UserOne(string userId)
-        {
-            UserRow? user = await _repository.UserOne(userId ?? "");
-            if (user == null)
-            {
-                return NotFound(new { message = "找不到使用者 " + userId + "。" });
-            }
-            return Json(user);
-        }
+        // 2026-10-30 19:32 removed: UserOne (ListDet page is removed)
 
         // POST /ZSYSRole/UserCreate
         [HttpPost]
@@ -134,7 +122,7 @@ namespace jsERP.Controllers
             int roleCount = await _repository.UserRoleCount(userId);
             if (roleCount > 0)
             {
-                return BadRequest(new { message = "帳號 " + userId + " 還有 " + roleCount + " 個角色，請先到「設定群組」刪除角色。" });
+                return BadRequest(new { message = "帳號 " + userId + " 還有 " + roleCount + " 個角色，請先到 Roles 分頁刪除角色。" }); // 2026-10-30 19:32 modified
             }
 
             bool ok = await _repository.UserDelete(userId);
@@ -173,12 +161,12 @@ namespace jsERP.Controllers
             return "";
         }
 
-        // ==================== Roles tab (ListDet page) ====================
+        // ==================== Roles tab (List page) ====================
 
-        // GET /ZSYSRole/UserRoles?userId=JOSH : roles of one user
-        public async Task<IActionResult> UserRoles(string userId)
+        // 2026-10-30 19:32 modified: UserRoles -> RoleList, GET /ZSYSRole/RoleList : all roles + user name
+        public async Task<IActionResult> RoleList()
         {
-            return Json(await _repository.RolesOfUser(userId ?? ""));
+            return Json(await _repository.RoleList());
         }
 
         // POST /ZSYSRole/RoleCreate
@@ -246,7 +234,7 @@ namespace jsERP.Controllers
             role.RoleId = (role.RoleId ?? "").Trim().ToUpper();
             role.RoleDesc = (role.RoleDesc ?? "").Trim();
             role.UserId = (role.UserId ?? "").Trim();
-            role.GroupId = (role.GroupId ?? "").Trim();  // 2026-10-29 15:44 added: "" = no group
+            // 2026-10-30 19:32 removed: GroupId (the group is set in 角色群組設定)
 
             if (role.RoleId == "")
             {
@@ -260,93 +248,11 @@ namespace jsERP.Controllers
             {
                 return "找不到使用者 " + role.UserId + "。";
             }
-            // 2026-10-29 15:44 added: the group must exist
-            if (role.GroupId != "" && !await _repository.GroupExists(role.GroupId))
-            {
-                return "找不到群組 " + role.GroupId + "。";
-            }
+            // 2026-10-30 19:32 removed: check of the group
             return "";
         }
 
-        // ==================== RoleGroups tab (ListDet page) ====================
-
-        // 2026-10-29 10:51 modified: GET /ZSYSRole/GroupList?userId=JOSH : all groups + roles of this user in each group
-        public async Task<IActionResult> GroupList(string userId)
-        {
-            return Json(await _repository.GroupList(userId ?? ""));
-        }
-
-        // POST /ZSYSRole/GroupCreate
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> GroupCreate([FromBody] GroupRow group)
-        {
-            string message = CheckGroup(group);
-            if (message != "")
-            {
-                return BadRequest(new { message = message });
-            }
-
-            if (await _repository.GroupExists(group.GroupId))
-            {
-                return BadRequest(new { message = "群組 " + group.GroupId + " 已經存在。" });
-            }
-
-            await _repository.GroupInsert(group);
-            return Ok(new { message = "新增成功。" });
-        }
-
-        // POST /ZSYSRole/GroupUpdate
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> GroupUpdate([FromBody] GroupRow group)
-        {
-            string message = CheckGroup(group);
-            if (message != "")
-            {
-                return BadRequest(new { message = message });
-            }
-
-            bool ok = await _repository.GroupUpdate(group);
-            if (!ok)
-            {
-                return BadRequest(new { message = "修改失敗，找不到這筆資料。" });
-            }
-            return Ok(new { message = "修改成功。" });
-        }
-
-        // POST /ZSYSRole/GroupDelete?groupId=QC
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> GroupDelete(string groupId)
-        {
-            bool ok = await _repository.GroupDelete(groupId ?? "");
-            if (!ok)
-            {
-                return BadRequest(new { message = "刪除失敗，找不到這筆資料。" });
-            }
-            return Ok(new { message = "刪除成功。" });
-        }
-
-        // 2026-10-29 10:51 removed: RoleList, GroupRoles, GroupRoleAdd, GroupRoleDelete
-        // (role <-> group is now set by the 群組 button of the Roles tab)
-
-        // Trim text and check required fields. Return "" when OK.
-        private string CheckGroup(GroupRow? group)
-        {
-            if (group == null)
-            {
-                return "資料格式錯誤。";
-            }
-
-            group.GroupId = (group.GroupId ?? "").Trim().ToUpper();
-            group.GroupDesc = (group.GroupDesc ?? "").Trim();
-
-            if (group.GroupId == "")
-            {
-                return "請輸入群組代號。";
-            }
-            return "";
-        }
+        // 2026-10-30 19:32 removed: RoleGroups section (GroupList, GroupCreate, GroupUpdate, GroupDelete, CheckGroup)
+        // moved to ZSYSRoleGroupController (角色群組設定)
     }
 }

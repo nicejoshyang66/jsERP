@@ -26,6 +26,8 @@ namespace jsERP.Services
 
         // Find the user by USERID + PWD2. Return null when not found.
         // (PWD is encrypted by the old system, so we do not use it.)
+        // 2026-10-30 11:40 modified: USERID and PWD2 are not case sensitive (UPPER both sides,
+        // because PWD2 column is Chinese_Taiwan_Stroke_CS_AS = case sensitive)
         public async Task<LoginUser?> Login(string userId, string password)
         {
             using SqlConnection connection = Connect();
@@ -33,8 +35,8 @@ namespace jsERP.Services
             string sql = """
                 SELECT USERID AS UserId, USERNAME AS UserName
                 FROM USERS
-                WHERE USERID = @userId AND PWD2 = @password
-                """;
+                WHERE UPPER(USERID) = UPPER(@userId) AND UPPER(PWD2) = UPPER(@password)
+                """; // 2026-10-30 11:40 modified: UPPER
 
             var parameters = new
             {

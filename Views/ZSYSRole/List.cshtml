@@ -1,85 +1,150 @@
 @* 2026-10-28 15:00 added: 角色資料維護 - one page, 3 tabs (Users / Roles / Role Groups), Vue *@
 @* 2026-10-29 10:51 modified: this page only shows users (add / edit / delete), 設定群組 goes to ListDet *@
+@* 2026-10-30 19:32 modified: 2 tabs - Users / Roles. 設定群組 button and ListDet page removed *@
 @{
     // 2026-10-29 16:15 modified: title comes from the menu (PageTitleFilter); this text is only the default
     ViewData["Title"] = ViewData["Title"] ?? "角色資料維護";
 }
 
-<!-- Vue app: user list -->
+<!-- Vue app: tabs Users / Roles -->
 <div id="role-app" v-cloak
      data-user-list-url="@Url.Action("UserList", "ZSYSRole")"
      data-user-create-url="@Url.Action("UserCreate", "ZSYSRole")"
      data-user-update-url="@Url.Action("UserUpdate", "ZSYSRole")"
      data-user-delete-url="@Url.Action("UserDelete", "ZSYSRole")"
      data-user-password-url="@Url.Action("UserPassword", "ZSYSRole")"
-     data-det-page-url="@Url.Action("ListDet", "ZSYSRole")">
+     data-role-list-url="@Url.Action("RoleList", "ZSYSRole")"
+     data-role-create-url="@Url.Action("RoleCreate", "ZSYSRole")"
+     data-role-update-url="@Url.Action("RoleUpdate", "ZSYSRole")"
+     data-role-delete-url="@Url.Action("RoleDelete", "ZSYSRole")"> <!-- 2026-10-30 19:32 modified: det-page-url removed, role urls added -->
     @Html.AntiForgeryToken()
 
     <h1 class="page-title">@ViewData["Title"]</h1> <!-- 2026-10-29 16:15 modified: menu caption; 2026-10-29 16:26 modified: class page-title -->
 
-    <!-- 2026-10-29 10:51 modified: Create New button like 登入帳戶資料維護 -->
-    <p>
-        <button type="button" class="btn btn-success btn-sm" v-on:click="openCreate">
-            <i class="bi bi-plus-circle"></i> Create New
-        </button>
-    </p>
+    <!-- 2026-10-30 19:32 added: tabs Users / Roles -->
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <a href="#" class="nav-link" v-bind:class="{ active: activeTab === 'users' }"
+               v-on:click.prevent="changeTab('users')">Users</a>
+        </li>
+        <li class="nav-item">
+            <a href="#" class="nav-link" v-bind:class="{ active: activeTab === 'roles' }"
+               v-on:click.prevent="changeTab('roles')">Roles</a>
+        </li>
+    </ul>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
-    <!-- 2026-10-29 10:51 modified: user table, no search box -->
-    <div class="table-responsive">
-        <!-- 2026-10-29 18:27 modified: table-sm (smaller cell padding, fits 150% screen) -->
-        <table class="table table-sm table-bordered table-hover align-middle">
-            <thead class="table-primary">
-                <tr>
-                    <!-- 2026-10-29 13:13 added: 密碼 (lock button), 啟用 (IS_ACTIVE) -->
-                    <th class="text-nowrap">密碼</th>
-                    <th class="text-nowrap">啟用</th>
-                    <th>代號</th>
-                    <th>名稱</th>
-                    <th>電話</th>
-                    <th>手機</th>
-                    <th>電子郵件</th>
-                    <th>備註</th>
-                    <th>功能</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- 2026-10-29 13:13 modified: colspan 7 -> 9 -->
-                <tr v-if="loading">
-                    <td colspan="9" class="text-muted">載入中…</td>
-                </tr>
-                <tr v-else-if="userList.length === 0">
-                    <td colspan="9" class="text-muted">沒有資料。</td>
-                </tr>
-                <tr v-for="item in userList" v-bind:key="item.userId">
-                    <!-- 2026-10-29 13:13 added: lock button opens the change password modal -->
-                    <td class="text-center">
-                        <button type="button" class="btn btn-warning btn-sm" v-on:click="openPassword(item)">
-                            <i class="bi bi-lock-fill"></i>
-                        </button>
-                    </td>
-                    <!-- 2026-10-29 13:13 added: IS_ACTIVE, only for showing (change it in Edit) -->
-                    <td class="text-center">
-                        <input type="checkbox" class="form-check-input" v-bind:checked="item.isActive === 1" disabled />
-                    </td>
-                    <td>{{ item.userId }}</td>
-                    <td>{{ item.userName }}</td>
-                    <td class="text-nowrap">{{ item.tel }}</td>
-                    <td class="text-nowrap">{{ item.mobile }}</td>
-                    <td>{{ item.email }}</td>
-                    <td>{{ item.description }}</td>
-                    <td class="text-nowrap">
-                        <button type="button" class="btn btn-outline-primary btn-sm me-1"
-                                v-on:click="openEdit(item)">Edit</button>
-                        <button type="button" class="btn btn-outline-danger btn-sm me-1"
-                                v-on:click="deleteUser(item)">Delete</button>
-                        <!-- 2026-10-29 10:51 added: go to roles / role groups of this user -->
-                        <a class="btn btn-primary btn-sm" v-bind:href="detPageUrl(item)">設定群組</a>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+    <!-- ---------- Tab 1: Users ---------- -->
+    <div v-if="activeTab === 'users'"> <!-- 2026-10-30 19:32 added -->
+
+        <!-- 2026-10-29 10:51 modified: Create New button like 登入帳戶資料維護 -->
+        <p>
+            <button type="button" class="btn btn-success btn-sm" v-on:click="openCreate">
+                <i class="bi bi-plus-circle"></i> Create New
+            </button>
+        </p>
+
+        <!-- 2026-10-29 10:51 modified: user table, no search box -->
+        <div class="table-responsive">
+            <!-- 2026-10-29 18:27 modified: table-sm (smaller cell padding, fits 150% screen) -->
+            <table class="table table-sm table-bordered table-hover align-middle">
+                <thead class="table-primary">
+                    <tr>
+                        <!-- 2026-10-29 13:13 added: 密碼 (lock button), 啟用 (IS_ACTIVE) -->
+                        <th class="text-nowrap">密碼</th>
+                        <th class="text-nowrap">啟用</th>
+                        <th>代號</th>
+                        <!-- 2026-10-30 21:00 modified: hide 名稱 / 電話 / 備註 when screen < 1400px, same as 電子郵件 -->
+                        <th class="d-none d-xxl-table-cell">名稱</th>
+                        <th class="d-none d-xxl-table-cell">電話</th>
+                        <!-- 2026-10-30 21:00 added: 群組 (always shown) -->
+                        <th>群組</th>
+                        <th>手機</th>
+                        <!-- 2026-10-30 09:31 modified: hide 電子郵件 when screen < 1400px (d-none d-xxl-table-cell) -->
+                        <th class="d-none d-xxl-table-cell">電子郵件</th>
+                        <th class="d-none d-xxl-table-cell">備註</th>
+                        <th>功能</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- 2026-10-30 21:00 modified: colspan 9 -> 10 (add 群組) -->
+                    <tr v-if="loading">
+                        <td colspan="10" class="text-muted">載入中…</td>
+                    </tr>
+                    <tr v-else-if="userList.length === 0">
+                        <td colspan="10" class="text-muted">沒有資料。</td>
+                    </tr>
+                    <tr v-for="item in userList" v-bind:key="item.userId">
+                        <!-- 2026-10-29 13:13 added: lock button opens the change password modal -->
+                        <td class="text-center">
+                            <button type="button" class="btn btn-warning btn-sm" v-on:click="openPassword(item)">
+                                <i class="bi bi-lock-fill"></i>
+                            </button>
+                        </td>
+                        <!-- 2026-10-29 13:13 added: IS_ACTIVE, only for showing (change it in Edit) -->
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input" v-bind:checked="item.isActive === 1" disabled />
+                        </td>
+                        <td>{{ item.userId }}</td>
+                        <td class="d-none d-xxl-table-cell">{{ item.userName }}</td> <!-- 2026-10-30 21:00 modified -->
+                        <td class="d-none d-xxl-table-cell text-nowrap">{{ item.tel }}</td> <!-- 2026-10-30 21:00 modified -->
+                        <td>{{ item.groups }}</td> <!-- 2026-10-30 21:00 added -->
+                        <td class="text-nowrap">{{ item.mobile }}</td>
+                        <td class="d-none d-xxl-table-cell">{{ item.email }}</td> <!-- 2026-10-30 09:31 modified -->
+                        <td class="d-none d-xxl-table-cell">{{ item.description }}</td> <!-- 2026-10-30 21:00 modified -->
+                        <td class="text-nowrap">
+                            <button type="button" class="btn btn-outline-primary btn-sm me-1"
+                                    v-on:click="openEdit(item)">Edit</button>
+                            <button type="button" class="btn btn-outline-danger btn-sm"
+                                    v-on:click="deleteUser(item)">Delete</button>
+                            <!-- 2026-10-30 19:32 removed: 設定群組 button -->
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div> <!-- 2026-10-30 19:32 added: end of Tab 1 -->
+
+    <!-- ---------- Tab 2: Roles (2026-10-30 19:32 added) ---------- -->
+    <div v-if="activeTab === 'roles'">
+        <p>
+            <button type="button" class="btn btn-success btn-sm" v-on:click="openRoleCreate">
+                <i class="bi bi-plus-circle"></i> Create New
+            </button>
+        </p>
+
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered table-hover align-middle">
+                <thead class="table-primary">
+                    <tr>
+                        <th>角色代號</th>
+                        <th>角色說明</th>
+                        <th>使用者代號</th>
+                        <th>使用者名稱</th>
+                        <th>功能</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-if="roleList.length === 0">
+                        <td colspan="5" class="text-muted">沒有資料。</td>
+                    </tr>
+                    <tr v-for="item in roleList" v-bind:key="item.roleId">
+                        <td>{{ item.roleId }}</td>
+                        <td>{{ item.roleDesc }}</td>
+                        <td>{{ item.userId }}</td>
+                        <td>{{ item.userName }}</td>
+                        <td class="text-nowrap">
+                            <button type="button" class="btn btn-outline-primary btn-sm me-1"
+                                    v-on:click="openRoleEdit(item)">Edit</button>
+                            <button type="button" class="btn btn-outline-danger btn-sm"
+                                    v-on:click="deleteRole(item)">Delete</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <!-- ==================== Modal: user form ==================== -->
@@ -128,6 +193,48 @@
                             <div class="col-12">
                                 <label class="form-label">備註</label>
                                 <input type="text" class="form-control" v-model="userForm.description" maxlength="100" />
+                            </div>
+                        </div>
+                        <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2">{{ formError }}</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-primary" v-bind:disabled="busy">儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== Modal: role form (2026-10-30 19:32 added) ==================== -->
+    <div class="modal fade" ref="roleModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <form v-on:submit.prevent="saveRole" class="d-flex flex-column overflow-hidden">
+                    <div class="modal-header">
+                        <h5 class="modal-title">{{ isNew ? '新增角色' : '修改角色' }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">角色代號 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" v-model="roleForm.roleId"
+                                       maxlength="12" v-bind:readonly="!isNew" required />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">角色說明</label>
+                                <input type="text" class="form-control" v-model="roleForm.roleDesc" maxlength="40" />
+                            </div>
+                            <!-- shows USERID + USERNAME, saves USERID -->
+                            <div class="col-12">
+                                <label class="form-label">使用者 <span class="text-danger">*</span></label>
+                                <select class="form-select" v-model="roleForm.userId" required>
+                                    <option value="">（請選擇）</option>
+                                    <option v-for="u in userList" v-bind:key="u.userId" v-bind:value="u.userId">
+                                        {{ u.userId }} - {{ u.userName }}
+                                    </option>
+                                </select>
                             </div>
                         </div>
                         <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2">{{ formError }}</div>

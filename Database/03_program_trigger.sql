@@ -4,7 +4,7 @@
 
    Rule:
      INSERT a program  -> add one SYS_PROGRAM_D row for every SYS_ROLEGROUPS.ROLEGROUP_ID
-                          (IS_VIEW / IS_ADD / IS_EDIT / IS_DELETE / IS_PRINT = 1)
+                          (IS_VIEW / IS_ADD / IS_EDIT / IS_DELETE / IS_PRINT / IS_SIGN = 1)   2026-10-30 11:13 modified: add IS_SIGN
                           e.g. 7 role groups -> 7 new rows
      DELETE a program  -> delete its SYS_PROGRAM_D rows (7 role groups -> 7 rows)
 
@@ -74,9 +74,9 @@ BEGIN
                 IF NOT EXISTS(SELECT * FROM dbo.SYS_PROGRAM_D WHERE ROLEGROUP_ID=@rolegroupid AND FORM_ID=@formid)
                 BEGIN
                     INSERT INTO dbo.SYS_PROGRAM_D
-                    (ROLEGROUP_ID, FORM_ID, IS_VIEW, IS_ADD, IS_EDIT, IS_DELETE, IS_PRINT)
+                    (ROLEGROUP_ID, FORM_ID, IS_VIEW, IS_ADD, IS_EDIT, IS_DELETE, IS_PRINT, IS_SIGN)   -- 2026-10-30 11:13 modified: add IS_SIGN
                     VALUES
-                    (@rolegroupid, @formid, 1, 1, 1, 1, 1)
+                    (@rolegroupid, @formid, 1, 1, 1, 1, 1, 1)
                 END
 
                 SET @n2+=1

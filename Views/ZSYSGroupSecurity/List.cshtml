@@ -1,0 +1,153 @@
+@* 2026-10-30 11:13 added: 群組權限資料維護 - role group on top, rights of the programs below (SYS_PROGRAM_D) *@
+@{
+    // title comes from the menu (PageTitleFilter); this text is only the default
+    ViewData["Title"] = ViewData["Title"] ?? "群組權限資料維護";
+}
+
+<!-- Vue app: rights of one role group -->
+<div id="group-security-app" v-cloak
+     data-group-list-url="@Url.Action("GroupList", "ZSYSGroupSecurity")"
+     data-program-list-url="@Url.Action("ProgramList", "ZSYSGroupSecurity")"
+     data-save-url="@Url.Action("Save", "ZSYSGroupSecurity")"
+     data-copy-url="@Url.Action("Copy", "ZSYSGroupSecurity")">
+    @Html.AntiForgeryToken()
+
+    <h1 class="page-title">@ViewData["Title"]</h1>
+
+    <!-- Top: group select + buttons -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-6 col-md-3 col-lg-2">
+                    <label class="form-label">群組代號</label>
+                    <select class="form-select" v-model="groupId" v-on:change="loadPrograms">
+                        <option v-for="g in groupList" v-bind:key="g.groupId" v-bind:value="g.groupId">
+                            {{ g.groupId }}
+                        </option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-4 col-lg-3">
+                    <label class="form-label">群組名稱</label>
+                    <input type="text" class="form-control" v-bind:value="groupDesc()" readonly />
+                </div>
+                <div class="col-12 col-md-5 col-lg-7 d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-warning" v-on:click="save" v-bind:disabled="busy || !groupId">
+                        <i class="bi bi-save"></i> 存檔
+                    </button>
+                    <button type="button" class="btn btn-warning" v-on:click="cancel" v-bind:disabled="busy || !groupId">
+                        <i class="bi bi-arrow-counterclockwise"></i> 取消
+                    </button>
+                    <button type="button" class="btn btn-primary ms-md-auto" v-on:click="openCopy" v-bind:disabled="busy || !groupId">
+                        <i class="bi bi-files"></i> 複製群組程式
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div v-if="message" class="alert alert-success py-2">{{ message }}</div>
+    <div v-if="error" class="alert alert-danger py-2">{{ error }}</div>
+
+    <!-- Rights of the programs -->
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle">
+            <thead class="table-dark text-center">
+                <tr>
+                    <th class="text-nowrap">程式代號</th>
+                    <th class="text-nowrap">程式名稱</th>
+                    <th class="text-nowrap">檢視</th>
+                    <th class="text-nowrap">新增</th>
+                    <th class="text-nowrap">修改</th>
+                    <th class="text-nowrap">刪除</th>
+                    <th class="text-nowrap">列印</th>
+                    <th class="text-nowrap">簽核</th>
+                    <th class="text-nowrap" style="min-width: 180px;">備註</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-if="programList.length === 0">
+                    <td colspan="9" class="text-center text-muted">此群組目前沒有權限資料。</td>
+                </tr>
+                <!-- grey bold row = master menu (檢視 off hides all its programs in the menu) -->
+                <tr v-for="item in programList" v-bind:key="item.rowId"
+                    v-bind:class="{ 'table-secondary fw-bold': item.isMaster === 1 }">
+                    <td class="text-nowrap">{{ item.formId }}</td>
+                    <td class="text-nowrap">
+                        <span v-bind:class="{ 'ps-3': item.isMaster === 0 }">{{ item.formCaption }}</span>
+                        <span v-if="item.isEnabled === 0" class="badge bg-secondary ms-1">停用</span>
+                    </td>
+                    <!-- checkbox: checked = 1, not checked = 0 -->
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input" v-model="item.isView" v-bind:true-value="1" v-bind:false-value="0" />
+                    </td>
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input" v-model="item.isAdd" v-bind:true-value="1" v-bind:false-value="0" />
+                    </td>
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input" v-model="item.isEdit" v-bind:true-value="1" v-bind:false-value="0" />
+                    </td>
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input" v-model="item.isDelete" v-bind:true-value="1" v-bind:false-value="0" />
+                    </td>
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input" v-model="item.isPrint" v-bind:true-value="1" v-bind:false-value="0" />
+                    </td>
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input" v-model="item.isSign" v-bind:true-value="1" v-bind:false-value="0" />
+                    </td>
+                    <td>
+                        <input type="text" class="form-control form-control-sm" v-model="item.remark" maxlength="30" />
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ==================== Modal: copy the rights of another group ==================== -->
+    <div class="modal fade" ref="copyModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form v-on:submit.prevent="copy">
+                    <div class="modal-header">
+                        <h5 class="modal-title">複製群組程式</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">群組代號</label>
+                                <input type="text" class="form-control" v-bind:value="groupId" readonly />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">群組名稱</label>
+                                <input type="text" class="form-control" v-bind:value="groupDesc()" readonly />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">來源群組 <span class="text-danger">*</span></label>
+                                <!-- all groups except the current one -->
+                                <select class="form-select" v-model="sourceId" required>
+                                    <option value="">請選擇來源群組</option>
+                                    <option v-for="g in sourceGroups()" v-bind:key="g.groupId" v-bind:value="g.groupId">
+                                        {{ g.groupId }} - {{ g.groupDesc }}
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="alert alert-warning mt-3 mb-0 py-2">
+                            確認複製後，目前群組的權限會被來源群組的權限覆蓋（尚未存檔的修改也會消失）。
+                        </div>
+                        <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2">{{ formError }}</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-primary" v-bind:disabled="busy">確認複製</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/zsysgroupsecurity.js" asp-append-version="true"></script>
+}

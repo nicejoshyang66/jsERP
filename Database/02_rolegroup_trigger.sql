@@ -4,13 +4,23 @@
 
    Rule:
      INSERT a role group  -> add one SYS_PROGRAM_D row for every SYS_PROGRAM.FORM_ID
-                             (IS_VIEW / IS_ADD / IS_EDIT / IS_DELETE / IS_PRINT = 1)
+                             (IS_VIEW / IS_ADD / IS_EDIT / IS_DELETE / IS_PRINT / IS_SIGN = 1)   2026-10-30 11:13 modified: add IS_SIGN
      DELETE a role group  -> delete its SYS_PROGRAM_D rows
 
    Note: all columns use Chinese_Taiwan_Stroke_CI_AS now (05_fix_collation.sql),
          so COLLATE is not needed.   2026-10-25 19:00 modified
    ============================================================ */
 USE JSERP;
+GO
+
+/* ---------- Step 0: add SYS_PROGRAM_D.IS_SIGN (簽核) ---------- */
+-- 2026-10-30 11:13 added: must exist before the triggers below use it
+IF COL_LENGTH('dbo.SYS_PROGRAM_D', 'IS_SIGN') IS NULL
+    ALTER TABLE dbo.SYS_PROGRAM_D ADD IS_SIGN int NULL;
+GO
+
+-- 2026-10-30 11:13 added: old rows get IS_SIGN = 1 (same as the other rights)
+UPDATE dbo.SYS_PROGRAM_D SET IS_SIGN = 1 WHERE IS_SIGN IS NULL;
 GO
 
 /* ---------- Step 1: trigger on SYS_ROLEGROUPS ---------- */
@@ -73,9 +83,9 @@ BEGIN
                 IF NOT EXISTS(SELECT * FROM dbo.SYS_PROGRAM_D WHERE ROLEGROUP_ID=@rolegroupid AND FORM_ID=@formid)
                 BEGIN
                     INSERT INTO dbo.SYS_PROGRAM_D
-                    (ROLEGROUP_ID, FORM_ID, IS_VIEW, IS_ADD, IS_EDIT, IS_DELETE, IS_PRINT)
+                    (ROLEGROUP_ID, FORM_ID, IS_VIEW, IS_ADD, IS_EDIT, IS_DELETE, IS_PRINT, IS_SIGN)   -- 2026-10-30 11:13 modified: add IS_SIGN
                     VALUES
-                    (@rolegroupid, @formid, 1, 1, 1, 1, 1)
+                    (@rolegroupid, @formid, 1, 1, 1, 1, 1, 1)
                 END
 
                 SET @n2+=1
@@ -142,9 +152,9 @@ BEGIN
         IF NOT EXISTS(SELECT * FROM dbo.SYS_PROGRAM_D WHERE ROLEGROUP_ID=@rolegroupid AND FORM_ID=@formid)
         BEGIN
             INSERT INTO dbo.SYS_PROGRAM_D
-            (ROLEGROUP_ID, FORM_ID, IS_VIEW, IS_ADD, IS_EDIT, IS_DELETE, IS_PRINT)
+            (ROLEGROUP_ID, FORM_ID, IS_VIEW, IS_ADD, IS_EDIT, IS_DELETE, IS_PRINT, IS_SIGN)   -- 2026-10-30 11:13 modified: add IS_SIGN
             VALUES
-            (@rolegroupid, @formid, 1, 1, 1, 1, 1)
+            (@rolegroupid, @formid, 1, 1, 1, 1, 1, 1)
         END
 
         SET @n2+=1

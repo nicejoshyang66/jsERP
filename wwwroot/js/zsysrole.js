@@ -1,5 +1,6 @@
 // 2026-10-28 15:00 added: 角色資料維護 - Users / Roles / Role Groups (Vue Composition API)
 // 2026-10-29 10:51 modified: this page only shows users (add / edit / delete), 設定群組 goes to ListDet
+// 2026-10-30 19:32 modified: 2 tabs - Users / Roles. 設定群組 button and ListDet page removed
 (function () {
     const { createApp, ref, onMounted } = Vue;
 
@@ -12,6 +13,12 @@
             const userList = ref([]);
             const loading = ref(true);
             const error = ref('');
+            const activeTab = ref('users');  // 2026-10-30 19:32 added: 'users' or 'roles'
+
+            // 2026-10-30 19:32 added: Roles tab
+            const roleList = ref([]);
+            const roleModal = ref(null);
+            const roleForm = ref({});
 
             // Modal (the <div class="modal">) and its form
             const userModal = ref(null);
@@ -69,9 +76,16 @@
                 bootstrap.Modal.getOrCreateInstance(userModal.value).hide();
             }
 
-            // 2026-10-29 10:51 added: url of the detail page of one user
-            function detPageUrl(item) {
-                return urls.detPageUrl + '?userId=' + encodeURIComponent(item.userId);
+            // 2026-10-30 19:32 removed: detPageUrl (設定群組 button is removed)
+
+            // 2026-10-30 19:32 added: change tab and load its data
+            async function changeTab(tab) {
+                activeTab.value = tab;
+                if (tab === 'users') {
+                    await loadUsers();
+                } else {
+                    await loadRoles();
+                }
             }
 
             // ---------- Users ----------
@@ -183,14 +197,81 @@
                 }
             }
 
+            // ==================== Roles tab (2026-10-30 19:32 added) ====================
+
+            // All roles + user name. Also load users (options of the 使用者 select).
+            async function loadRoles() {
+                error.value = '';
+                try {
+                    roleList.value = await getJson(urls.roleListUrl);
+                    userList.value = await getJson(urls.userListUrl);
+                } catch (requestError) {
+                    error.value = requestError.message;
+                }
+            }
+
+            function openRoleCreate() {
+                isNew.value = true;
+                formError.value = '';
+                roleForm.value = { roleId: '', roleDesc: '', userId: '' };
+                bootstrap.Modal.getOrCreateInstance(roleModal.value).show();
+            }
+
+            function openRoleEdit(item) {
+                isNew.value = false;
+                formError.value = '';
+                // Copy the row, so the table does not change before saving
+                roleForm.value = {
+                    roleId: item.roleId,
+                    roleDesc: item.roleDesc,
+                    userId: item.userId || ''
+                };
+                bootstrap.Modal.getOrCreateInstance(roleModal.value).show();
+            }
+
+            async function saveRole() {
+                if (busy.value) {
+                    return;
+                }
+                busy.value = true;
+                formError.value = '';
+                try {
+                    const url = isNew.value ? urls.roleCreateUrl : urls.roleUpdateUrl;
+                    await postJson(url, roleForm.value);
+                    bootstrap.Modal.getOrCreateInstance(roleModal.value).hide();
+                    await loadRoles();
+                } catch (requestError) {
+                    formError.value = requestError.message;
+                } finally {
+                    busy.value = false;
+                }
+            }
+
+            async function deleteRole(item) {
+                if (!confirm('確定要刪除角色 ' + item.roleId + ' ？\n它也會從所屬群組中移除！')) {
+                    return;
+                }
+                error.value = '';
+                try {
+                    await postJson(urls.roleDeleteUrl + '?roleId=' + encodeURIComponent(item.roleId), {});
+                    await loadRoles();
+                } catch (requestError) {
+                    error.value = requestError.message;
+                }
+            }
+
             onMounted(loadUsers);
 
             return {
-                userList, loading, error, detPageUrl,
+                userList, loading, error,
+                activeTab, changeTab,  // 2026-10-30 19:32 added; detPageUrl removed
                 openCreate, openEdit, saveUser, deleteUser,
                 userModal, userForm, isNew, formError, busy,
                 // 2026-10-29 13:13 added: change password
-                passwordModal, passwordForm, passwordError, openPassword, savePassword
+                passwordModal, passwordForm, passwordError, openPassword, savePassword,
+                // 2026-10-30 19:32 added: Roles tab
+                roleList, roleModal, roleForm,
+                openRoleCreate, openRoleEdit, saveRole, deleteRole
             };
         }
     }).mount(roleHost);
