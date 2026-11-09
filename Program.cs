@@ -28,6 +28,7 @@ builder.Services.AddScoped<jsERP.Services.ErpRepository>();
 builder.Services.AddScoped<jsERP.Services.RoleRepository>();
 builder.Services.AddScoped<jsERP.Services.GroupSecurityRepository>();
 builder.Services.AddScoped<jsERP.Services.RoleGroupRepository>();
+builder.Services.AddScoped<jsERP.Services.ComPayRepository>(); // 2026-11-09 14:30 added: 客戶 / 供應商基本資料
 
 // 2026-10-24 17:35 added: cookie login
 builder.Services.AddAuthentication("ErpCookie").AddCookie("ErpCookie", option =>

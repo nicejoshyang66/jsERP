@@ -69,7 +69,9 @@ namespace jsERP.Services
         // 2026-10-29 16:15 added: page title = menu caption (SYS_PROGRAM.FORM_CAPTION) of this controller
         // Same action first (List), then enabled rows first. A sub page (ListDet) gets the caption of its List.
         // Return null when the controller is not in the menu.
-        public async Task<string?> PageTitle(string controllerName, string actionName)
+        // 2026-11-09 14:30 modified: add routeName (query string without "?"), so menus that share
+        //   one controller / action (BASComPay?CLASSID=A / B) get their own caption
+        public async Task<string?> PageTitle(string controllerName, string actionName, string routeName)
         {
             using SqlConnection connection = Connect();
 
@@ -78,12 +80,13 @@ namespace jsERP.Services
                 FROM SYS_PROGRAM
                 WHERE CONTROLLER_NAME = @controllerName
                 ORDER BY CASE WHEN ACTION_NAME = @actionName THEN 0 ELSE 1 END,
+                         CASE WHEN ISNULL(ROUTE_NAME, '') = @routeName THEN 0 ELSE 1 END,
                          CASE WHEN IS_ENABLED = 1 THEN 0 ELSE 1 END,
                          SORT_NO
                 """;
 
             return await connection.QueryFirstOrDefaultAsync<string?>(sql,
-                new { controllerName = controllerName, actionName = actionName });
+                new { controllerName = controllerName, actionName = actionName, routeName = routeName });
         }
 
         // 2026-10-28 09:40 added: SYS_PROGRAM master list (top menus, no parent)

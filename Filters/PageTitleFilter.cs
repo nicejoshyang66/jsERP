@@ -24,7 +24,11 @@ namespace jsERP.Filters
                 string controllerName = context.RouteData.Values["controller"]?.ToString() ?? "";
                 string actionName = context.RouteData.Values["action"]?.ToString() ?? "";
 
-                string? title = await _repository.PageTitle(controllerName, actionName);
+                // 2026-11-09 14:30 added: query string without "?" (e.g. CLASSID=A), compared with ROUTE_NAME
+                string routeName = context.HttpContext.Request.QueryString.Value ?? "";
+                routeName = routeName.TrimStart('?');
+
+                string? title = await _repository.PageTitle(controllerName, actionName, routeName); // 2026-11-09 14:30 modified
                 if (!string.IsNullOrWhiteSpace(title))
                 {
                     viewResult.ViewData["Title"] = title;
