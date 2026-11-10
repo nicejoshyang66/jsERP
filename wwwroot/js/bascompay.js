@@ -3,10 +3,16 @@
 (function () {
     const { createApp, ref, computed, onMounted } = Vue; // 2026-11-09 15:46 modified: add computed
 
+    // const host = document.getElementById('compay-app');
+    // const token = host.querySelector('input[name="__RequestVerificationToken"]').value;
+    // const urls = host.dataset; // all data-xxx of the page
+    // const classId = host.dataset.classId;
+
     const host = document.getElementById('compay-app');
-    const token = host.querySelector('input[name="__RequestVerificationToken"]').value;
-    const urls = host.dataset; // all data-xxx of the page
+    const token = host.querySelector('input[name="__RequestVerificationToken"]').value
+    const urls = host.dataset // all data-xxx of the page
     const classId = host.dataset.classId;
+
 
     createApp({
         setup() {
